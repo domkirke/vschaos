@@ -12,7 +12,7 @@ from ..vaes import AbstractVAE
 from ..monitor import visualize_dimred as dr
 import dill
 
-from vschaos.vaes import *
+from ..vaes import *
 
 
 # phase reconstruction

@@ -293,6 +293,8 @@ def transformHandler(sig, currentType, direction, options):
     elif (direction == 'inverse'):
         if (currentType == 'stft'):
             sig = np.transpose(sig)
+            if sig.shape[1] == 1:
+                sig = sig.repeat(2, -1)
             currentTransform = librosa.istft(sig, hop_length=hopSize, win_length=winSize)
         elif (currentType == 'mel'):
             print('[Warning] Mel inversion not implemented yet.')

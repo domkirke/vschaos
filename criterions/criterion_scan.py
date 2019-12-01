@@ -5,7 +5,7 @@ Created on Mon Oct 22 16:45:41 2018
 
 @author: chemla
 """
-from vschaos.criterions.criterion_criterion import reduce
+from ..criterions.criterion_criterion import reduce
 import torch.distributions.kl as kl
 import torch.nn.functional as func
 import pdb

@@ -79,6 +79,11 @@ def scatter(self, inputs, kwargs, device_ids):
     return utils.scatter_kwargs(inputs, kwargs, device_ids, dim=self.dim)
 
 
+def load(path, **kwargs):
+    loaded_data = torch.load(path, **kwargs)
+    return loaded_data
+
+
 DataParallel.gather = gather
 DataParallel.__getattr__ = __getattr
 DataParallel.scatter = scatter
