@@ -64,21 +64,7 @@ class InfoNCE(Criterion):
         return {'cpc': losses[0]}
 
 
-class AdversarialReinforcement(Criterion):
-    def __init__(self, pinput, padversarial={}, poptim={}, **kwargs):
-        padversarial['nlayers'] = padversarial.get('nlayers', 2)
-        padversarial['dim'] = kwargs.get('dim', 400)
-        self.adversarial_module = MLP(pinput, padversarial)
-        self.init_optimizer(poptim)
 
-    def init_optimizer(self, optim_params):
-        alg = optim_params.get('optimizer', 'Adam')
-        optim_args = optim_params.get('optim_args', {'lr':1e-5})
-        self.optimizer = getattr(torch.optim, alg)(**optim_args)
-
-        scheduler = optim_params.get('scheduler', 'ReduceLROnPlateau')
-        scheduler_args = optim_params.get('scheduler_args', {'patience':100, "factor":0.2, 'eps':1e-10})
-        self.scheduler = getattr(torch.optim.lr_scheduler, scheduler)(self.optimizer, **scheduler_args)
 
 
     # def loss(self, out=None, **kwargs):

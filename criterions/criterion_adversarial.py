@@ -1,24 +1,26 @@
 from . import Criterion
 import torch, pdb
 import torch.nn as nn
+from .. import DataParallel
+from .. import distributions as dist
 from ..modules.modules_bottleneck import MLP
 from numpy import cumprod
 
 
 class Adversarial(Criterion):
     module_class = MLP
-    def __init__(self, latent_params=None, adversarial_params=None, optim_params=None, cuda=None, **kwargs):
-        assert latent_params
+    def __init__(self, input_params=None, adversarial_params=None, optim_params={}, cuda=None, **kwargs):
+        assert input_params
         super(Adversarial, self).__init__()
         self.adversarial_params=adversarial_params
-        self.latent_params = latent_params
-        self.init_modules(latent_params, adversarial_params)
+        self.input_params = input_params
+        self.init_modules(input_params, adversarial_params)
         self.init_optimizer(optim_params)
         if cuda is not None:
             if issubclass(type(cuda), list):
                 self.cuda(cuda[0])
                 if len(cuda) > 1:
-                    self = vschaos.DataParallel(self, cuda, cuda[0])
+                    self = DataParallel(self, cuda, cuda[0])
             else:
                 self.cuda(cuda)
 
@@ -36,12 +38,21 @@ class Adversarial(Criterion):
         optimizer = getattr(torch.optim, alg)([{'params':self.parameters()}], **optim_args)
         self.optimizer = optimizer
 
-    def loss(self, params1, params2, sample=False, **kwargs):
-        z_fake = params1.sample().float()
-        z_real= params2.sample().float()
+    def loss(self, x_params=None, target=None, sample=False, **kwargs):
+        assert x_params is not None; params1 = x_params
+        assert target is not None; params2 = target
+        if issubclass(type(params1), dist.Distribution):
+            z_fake = params1.sample().float()
+        else:
+            z_fake = params1.float()
+        if issubclass(type(params2), dist.Distribution):
+            z_real = params2.sample().float()
+        else:
+            z_real = params2.float()
         if len(z_fake.shape) > 2:
             z_fake = z_fake.contiguous().view(cumprod(z_fake.shape[:-1])[-1], z_fake.shape[-1])
             z_real = z_real.contiguous().view(cumprod(z_real.shape[:-1])[-1], z_real.shape[-1])
+
         d_real = torch.sigmoid(self.discriminator(self.hidden_module(z_real)))
         d_fake = torch.sigmoid(self.discriminator(self.hidden_module(z_fake)))
         device = z_fake.device

@@ -242,7 +242,7 @@ class DatasetAudio(generic.Dataset):
                     finalMeta.append(0)
 
         if os.path.isfile("%s/%s/transformOptions.npy"%(analysisDirectory, transformName)):
-            self.transformOptions = np.load("%s/%s/transformOptions.npy"%(analysisDirectory, transformName))[None][0]
+            self.transformOptions = np.load("%s/%s/transformOptions.npy"%(analysisDirectory, transformName), allow_pickle=True)[None][0]
         return finalData, finalMeta
 
 

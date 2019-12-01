@@ -11,6 +11,7 @@ from ..modules import modules_bottleneck as bt
 from ..modules import modules_convolution as conv
 from ..modules.modules_recurrent import RNNLayer
 from .criterion_criterion import Criterion
+from .criterion_adversarial import Adversarial
 from collections import OrderedDict
 from ..utils.misc import checklist, checktuple, print_module_stats, flatten_seq_method
 
@@ -257,7 +258,6 @@ class LossReinforcement(Criterion):
     # Optimization functions
     def step(self, retain_graph=False):
         #print_grad_stats(self)
-        pdb.set_trace()
         self.optimizer.step()
         if not retain_graph:
             self.zero_grad()
@@ -292,6 +292,24 @@ class L1Reinforcement(LossReinforcement):
     def get_named_losses(self, losses):
         return {'l1reinforce':losses[0]}
 
+class AdversarialReinforcement(LossReinforcement):
+    def __init__(self, pinput, adversarial_params={}, poptim={}, **kwargs):
+        super(AdversarialReinforcement, self).__init__(pinput, **kwargs)
+        self.adv_loss = Adversarial(pinput, adversarial_params, poptim)
 
-# class AdversarialReinforcement(Criterion):
-    # def __init__(self):
+    def get_reinforced_error(self, x_resyn, x_original):
+        loss, losses = self.adv_loss(x_resyn, x_original)
+        return loss
+
+    def init_optimizer(self, optim_params):
+        alg = optim_params.get('optimizer', 'Adam')
+        optim_args = optim_params.get('optim_args', {'lr':1e-5})
+        self.optimizer = getattr(torch.optim, alg)(self.parameters(), **optim_args)
+
+        scheduler = optim_params.get('scheduler', 'ReduceLROnPlateau')
+        scheduler_args = optim_params.get('scheduler_args', {'patience':100, "factor":0.2, 'eps':1e-10})
+        self.scheduler = getattr(torch.optim.lr_scheduler, scheduler)(self.optimizer, **scheduler_args)
+
+    def get_named_losses(self, losses):
+        return {'adv_reinforce': losses[0]}
+
