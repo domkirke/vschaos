@@ -38,28 +38,16 @@
 __version__ = "1.0"
 __author__  = "chemla@ircam.fr", "esling@ircam.fr"
 __date__    = ""
-__all__     = ["criterions", "data", "distributions", "modules", "monitor", "train", "utils", "vaes", "DataParallel", "Module"]
+__all__     = ["criterions", "data", "distributions", "modules", "monitor", "train", "utils", "vaes", "DataParallel"]
 
 import torch, pdb
 from torch.nn.parallel.scatter_gather import scatter_kwargs
 torch.manual_seed(0)
 
 #TODO this is a hack for GPU training where tkinter is not installed; do not deploy!!
-if torch.cuda.is_available():
-    import matplotlib
-    matplotlib.use('agg')
-
-from . import utils
-from . import distributions
-from . import criterions
-from . import data
-#from . import misc
-from . import modules
-from . import monitor
-from . import vaes
-from . import train
-from itertools import chain
-
+#if torch.cuda.is_available():
+#    import matplotlib
+#    matplotlib.use('agg')
 
 # overriding DataParallel to allow distribution parallelization
 # tests for sub-commit
@@ -87,5 +75,17 @@ def load(path, **kwargs):
 DataParallel.gather = gather
 DataParallel.__getattr__ = __getattr
 DataParallel.scatter = scatter
+from . import utils
+from . import distributions
+from . import criterions
+from . import data
+#from . import misc
+from . import modules
+from . import monitor
+from . import vaes
+from . import train
+from itertools import chain
+
+
 
 

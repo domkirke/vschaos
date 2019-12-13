@@ -34,3 +34,5 @@ from .criterion_functional import *
 from .criterion_elbo import *
 from .criterion_scan import *
 from .criterion_misc import *
+from .criterion_adversarial import Adversarial
+

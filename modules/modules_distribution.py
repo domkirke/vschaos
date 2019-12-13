@@ -51,6 +51,7 @@ def GaussianLayer(pinput, poutput, **kwargs):
     #     take_conv = len(poutput['dim']) != 1
     if poutput.get('conv'):
         take_conv = poutput['conv']
+    take_conv = take_conv or issubclass(type(poutput['dim']), tuple)
     if take_conv:
         return GaussianLayer2D(pinput, poutput, **kwargs)
     else:
@@ -262,7 +263,6 @@ class GaussianLayer2D(nn.Module):
 
         if issubclass(type(self.mean_modules), nn.ModuleList):
             mu_out = []
-            pdb.set_trace()
             for i in range(len(self.mean_modules)):
                 mu_out.append(self.mean_modules[i](ins[:, i], indices=indices) * self.weights[i])
             if output_heads:

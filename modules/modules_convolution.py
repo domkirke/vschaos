@@ -867,9 +867,9 @@ class DeconvolutionalLatent(ConvolutionalLatent):
 
             # reverse parameters to mirror the given encoding process
             if encoder:
-                conv_dim = len(checklist(checklist(encoder.pins)[i]['dim']))
+                conv_dim = len(checktuple(checklist(encoder.pins)[i]['dim']))
             else:
-                conv_dim = 1 if pouts is None else len(checklist(checklist(pouts)[i]['dim']))
+                conv_dim = 1 if pouts is None else len(checktuple(checklist(pouts)[i]['dim']))
             conv_class = ph.get('conv_class', self.conv_class)
             conv_layer = ph.get('conv_layer', self.conv_layer)
             self.phidden[i]['channels'] = checklist(ph['channels'], rev=True)
@@ -879,6 +879,7 @@ class DeconvolutionalLatent(ConvolutionalLatent):
             self.phidden[i]['kernel_size'] = list(reversed([tuple(checklist(ks, conv_dim))for ks in self.phidden[i]['kernel_size']]))
             self.phidden[i]['padding'] = [tuple(np.ceil(np.array(ks)/2).astype('int').tolist()) for ks in self.phidden[i]['kernel_size']]
             self.phidden[i]['output_padding'] = checklist(ph.get('output_padding', 0), len(ph['channels']), rev=True)
+            self.phidden[i]['conv_dim'] = ph.get('conv_dim') or len(checktuple(checklist(pouts)[i]['dim']))
 
             # fit layers' output size to fit the incoming unpooling indices in case
             if has_pooling:
@@ -896,7 +897,7 @@ class DeconvolutionalLatent(ConvolutionalLatent):
             # init module
             conv_modules.append(conv_class(checklist(self.pins, n=len(self.phidden))[i], self.phidden[i], conv_layer=conv_layer, *args, **kwargs))
             self.conv_modules = nn.ModuleList(conv_modules)
-            input_size = np.cumprod(self.post_pooling_sizes_dec[i])[0]
+            input_size = tuple(self.post_pooling_sizes_dec[i][0].tolist())
             transfer_modules[i], transfered_sizes[i] = self.get_flattening_module(input_size, self.phidden[i])
            # self.separate_heads = self.conv_module.separate_heads
             # self.return_indices = self.conv_module.return_indices
@@ -967,7 +968,7 @@ class DeconvolutionalLatent(ConvolutionalLatent):
         :return: output_dims, output_paddings
         :rtype: list, list
         """
-        input_dim = sum([p['dim'] for p in checklist(pins)])
+        input_dim = sum([np.array(p['dim']) for p in checklist(pins)])
         output_dim = np.array(input_dim)
         n_layers = len(phidden['channels'])
         output_paddings = []
@@ -998,7 +999,7 @@ class DeconvolutionalLatent(ConvolutionalLatent):
         transfer_mode = phidden.get('transfer', 'unflatten')
         n_channels = phidden['channels'][0]
         if transfer_mode == "unflatten":
-            return Reshape([n_channels, input_dim]), input_dim * n_channels
+            return Reshape([n_channels, *input_dim]), np.cumprod(input_dim)[-1] * n_channels
         elif transfer_mode == "conv1x1":
             return Sequential(Unsqueeze(1), ConvLayer.conv_modules[phidden['conv_dim']](1, n_channels, kernel_size=1)), input_dim
 
