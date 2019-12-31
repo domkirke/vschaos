@@ -123,11 +123,27 @@ class Criterion(nn.modules.loss._Loss):
         new = copy.deepcopy(self)
         new._pow = f
         return CriterionContainer([new])
-        
-    # def __rdiv__(self, c):
-    #     raise NotImplementedError
-    #     return self.__div__(c)
-        
+
+    def reduce(self, data, reduction=None):
+        reduction = reduction or self.reduction
+        if type(data) in (int, float):
+            return 0
+        if reduction == "mean" or len(data.shape)==1:
+            # global average
+            return torch.mean(data)
+        elif reduction == "seq":
+            sum_dims = tuple(range(len(data.shape))[2:])
+            return torch.sum(data, dim=sum_dims).mean()
+        else:
+            # just average on batches (mathematically better, no?)
+    #        return torch.sum(data)
+            sum_dims = tuple(range(len(data.shape))[1:])
+            return torch.sum(data, dim=sum_dims).mean()
+            
+        # def __rdiv__(self, c):
+        #     raise NotImplementedError
+        #     return self.__div__(c)
+            
 
 class CriterionContainer(Criterion):
     def __init__(self,  criterions=[], options={}, weight=1.0, **kwargs):
@@ -172,6 +188,10 @@ class CriterionContainer(Criterion):
             current_loss = self._criterions[i].get_named_losses(l)
             named_losses = {**named_losses, **current_loss}
         return named_losses
+
+    def cuda(self, *args, **kwargs):
+        for c in self._criterions:
+            c.cuda(*args, **kwargs)
 
             
             

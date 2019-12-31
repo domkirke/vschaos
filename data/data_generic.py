@@ -1193,10 +1193,11 @@ def dataset_from_torch(name, transform=None, target_transform=None):
     train_dataset = getattr(torchvision.datasets, name)(current_path, transform=transform, target_transform=target_transform, download=True, train=True)
     test_dataset = getattr(torchvision.datasets, name)(current_path, transform=transform, target_transform=target_transform, download=True, train=False)
     full_dataset = Dataset({'dataPrefix':current_path})
-    full_dataset.data = np.concatenate([train_dataset.data.float().numpy(), test_dataset.data.float().numpy()], axis=0)
-    full_dataset.partitions = {'train':np.arange(train_dataset.data.shape[0]),
-                               'test':(train_dataset.data.shape[0] + np.arange(test_dataset.data.shape[0]))}
-    full_dataset.metadata = {'class':np.concatenate([train_dataset.targets.numpy(), test_dataset.targets.numpy()])}
+    full_dataset.data = np.concatenate([train_dataset.train_data.float().numpy(), test_dataset.test_data.float().numpy()], axis=0)
+    full_dataset.partitions = {'train':np.arange(train_dataset.train_data.shape[0]),
+                               'test':(train_dataset.train_data.shape[0] + np.arange(test_dataset.test_data.shape[0]))}
+    #pdb.set_trace()
+    full_dataset.metadata = {'class':np.concatenate([train_dataset.train_labels.numpy(), test_dataset.test_labels.numpy()])}
     full_dataset.classes = {'class':{k:k for k in range(full_dataset.metadata['class'].min(), full_dataset.metadata['class'].max()+1)}}
     full_dataset.tasks = ['class']
     return full_dataset

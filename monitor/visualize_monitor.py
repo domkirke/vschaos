@@ -26,6 +26,7 @@ plot_hash = {'reconstructions': lplt.plot_reconstructions,
              'conv_weights': lplt.plot_conv_weights,
              'losses': lplt.plot_losses,
              'class_losses':lplt.plot_class_losses,
+             'grid_latent':lplt.grid_latent,
              'descriptors_2d':plot2Ddescriptors,
              'descriptors_3d':plot3Ddescriptors}
 

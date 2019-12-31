@@ -88,7 +88,7 @@ def get_divs(n):
 
 # Plotting functions
 
-def plot_mean_1d(dist, x=None, preprocessing=None, axes=None, multihead=None, concat_seq=None, suffix=None, *args, **kwags):
+def plot_mean_1d(dist, x=None, preprocessing=None, axes=None, multihead=None, concat_seq=None, suffix=None, out=None, *args, **kwags):
     n_examples = dist.batch_shape[0]
     # create axes
     if axes is None:
@@ -158,18 +158,32 @@ def plot_mean_1d(dist, x=None, preprocessing=None, axes=None, multihead=None, co
             fig.append(fig_m)
             axes.append(axes_m)
 
+    if out is not None:
+        fig.savefig(out, format="pdf")
+
     return fig, axes
 
-def plot_mean_2d(dist, x=None, preprocessing=None, preprocess="False", multihead=None, *args, **kwargs):
+def plot_mean_2d(dist, x=None, preprocessing=None, preprocess="False", multihead=None, out=None, *args, **kwargs):
     n_examples = dist.batch_shape[0]
     n_rows, n_columns = get_divs(n_examples)
+    has_std = hasattr(dist, 'stddev')
     if x is None:
         fig, axes = plt.subplots(n_rows, n_columns)
+        if has_std:
+            fig_std, axes_std = plt.subplots(n_rows, n_columns)
     else:
         fig, axes = plt.subplots(n_rows, 2 * n_columns)
+        if has_std:
+            fig_std, axes_std = plt.subplots(n_rows, 2*n_columns)
+
     if axes.ndim == 1:
         axes = axes[np.newaxis, :]
+        if has_std:
+            axes_std = axes_std[np.newaxis, :]
+
     dist_mean = dist.mean.cpu().detach().numpy()
+    if has_std:
+        dist_std = dist.stddev.cpu().detach().numpy()
 
     if preprocess:
         assert preprocessing, 'if preprocess is on then give a preprocessing object'
@@ -187,6 +201,16 @@ def plot_mean_2d(dist, x=None, preprocessing=None, preprocess="False", multihead
                     axes[i,j].set_title('data')
                     axes[i,j+1].imshow(dist_mean[i*n_columns+j], aspect='auto')
                     axes[i,j+1].set_title('reconstruction')
+                if hasattr(dist, "stddev"):
+                    if x is not None:
+                        axes_std[i,2*j].imshow(x[i*n_columns+j], aspect='auto')
+                        axes_std[i,2*j].set_title('data')
+                        axes_std[i,2*j+1].imshow(dist_std[i*n_columns+j],vmin=0, vmax=1, aspect='auto')
+                        axes_std[i,2*j+1].set_title('reconstruction')
+                    else:
+                        axes_std[i,j].set_title('data')
+                        axes_std[i,j+1].imshow(dist_std[i*n_columns+j], vmin=0, vmax=1, aspect='auto')
+                        axes_std[i,j+1].set_title('reconstruction')
 
     if multihead is not None:
         fig = [fig]; axes = [axes];
@@ -200,12 +224,18 @@ def plot_mean_2d(dist, x=None, preprocessing=None, preprocess="False", multihead
             fig.append(fig_m)
             axes.append(axes_m)
 
+    if out is not None:
+        fig.savefig(out+".pdf", format="pdf")
+        if has_std:
+            fig_std.savefig(out+"_std.pdf", format="pdf")
+
     return fig, axes
 
 
 def plot_dirac(x, *args, **kwargs):
     x = dist.Normal(x, torch.zeros_like(x))
     return plot_mean(x, *args, **kwargs)
+
 
 def plot_mean(x, target=None, preprocessing=None, axes=None, *args, is_sequence=False, **kwargs):
     is_sequence = is_sequence and x.mean.shape[1] > 1

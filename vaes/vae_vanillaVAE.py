@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.optim
 
 from ..modules.modules_hidden import  HiddenModule
-from ..utils.misc import GPULogger, denest_dict, apply, apply_method, apply_distribution
+from ..utils.misc import GPULogger, denest_dict, apply, apply_method, apply_distribution, print_stats
 from . import AbstractVAE 
 
 logger = GPULogger(verbose=False)
@@ -116,6 +116,9 @@ class VanillaVAE(AbstractVAE):
         x = self.format_input_data(x, requires_grad=False)
         # logger("data formatted")
         enc_out = self.encode(x, y=y, *args, **kwargs)
+        #print_stats(enc_out[-1]['out_params'].mean, "latent mean")
+        #print_stats(enc_out[-1]['out_params'].stddev, "latent std")
+
         logger("data encoded")
         dec_out = self.decode(enc_out[-1]['out'], y=y, *args, **kwargs)
         logger("data decoded")

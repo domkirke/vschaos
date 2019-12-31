@@ -3,6 +3,7 @@ import torch, pdb
 import torch.nn as nn
 from .. import DataParallel
 from .. import distributions as dist
+from ..utils import checktuple, checklist
 from ..modules.modules_bottleneck import MLP
 from numpy import cumprod
 
@@ -28,7 +29,7 @@ class Adversarial(Criterion):
     def init_modules(self, input_params, adversarial_params):
         adversarial_params = adversarial_params or {'dim':500, 'nlayers':2}
         self.hidden_module = MLP(input_params, adversarial_params)
-        self.discriminator = nn.Linear(adversarial_params['dim'], 1)
+        self.discriminator = nn.Linear(checklist(adversarial_params['dim'])[-1], 1)
 
     def init_optimizer(self, optim_params={}):
         self.optim_params = optim_params
@@ -41,30 +42,59 @@ class Adversarial(Criterion):
     def loss(self, x_params=None, target=None, sample=False, **kwargs):
         assert x_params is not None; params1 = x_params
         assert target is not None; params2 = target
+
+        #pdb.set_trace()
         if issubclass(type(params1), dist.Distribution):
-            z_fake = params1.sample().float()
+            z_fake = params1.rsample().float()
         else:
             z_fake = params1.float()
         if issubclass(type(params2), dist.Distribution):
-            z_real = params2.sample().float()
+            z_real = params2.rsample().float()
         else:
             z_real = params2.float()
-        if len(z_fake.shape) > 2:
-            z_fake = z_fake.contiguous().view(cumprod(z_fake.shape[:-1])[-1], z_fake.shape[-1])
-            z_real = z_real.contiguous().view(cumprod(z_real.shape[:-1])[-1], z_real.shape[-1])
 
-        d_real = torch.sigmoid(self.discriminator(self.hidden_module(z_real)))
-        d_fake = torch.sigmoid(self.discriminator(self.hidden_module(z_fake)))
+        data_dim = len(checktuple(self.input_params['dim'])) 
+        if len(z_fake.shape) > data_dim + 1:
+            z_fake = z_fake.contiguous().view(cumprod(z_fake.shape[:-data_dim])[-1], *z_fake.shape[-data_dim:])
+            z_real = z_real.contiguous().view(cumprod(z_real.shape[:-data_dim])[-1], *z_real.shape[-data_dim:])
+
         device = z_fake.device
-        loss_real = torch.nn.functional.binary_cross_entropy(d_real, torch.ones(d_real.shape, device=device))
-        loss_fake = torch.nn.functional.binary_cross_entropy(d_fake, torch.zeros(d_fake.shape, device=device))
-        loss = -torch.mean(loss_real+loss_fake)
-        return loss, (loss,)
+        # get generated loss
+        d_gen = torch.sigmoid(self.discriminator(self.hidden_module(z_fake)))
+        #print('d_gen : ', d_gen.min(), d_gen.max())
+        try:
+            assert d_gen.min() >= 0 and d_gen.max() <= 1
+        except AssertionError:
+            pdb.set_trace()
+        loss_gen = self.reduce(torch.nn.functional.binary_cross_entropy(d_gen, torch.ones(d_gen.shape, device=device), reduction="none"))
+
+        # get discriminative loss
+        d_real = torch.sigmoid(self.discriminator(self.hidden_module(z_real)))
+        #print('d_real : ', d_real.min(), d_real.max())
+        try:
+            assert d_real.min() >= 0 and d_real.max() <= 1
+        except AssertionError:
+            pdb.set_trace()
+
+        d_fake = torch.sigmoid(self.discriminator(self.hidden_module(z_fake.detach())))
+        #print('d_fake : ', d_fake.min(), d_fake.max())
+        try:
+            assert d_fake.min() >= 0 and d_fake.max() <= 1
+        except AssertionError:
+            pdb.set_trace()
+
+        loss_real = torch.nn.functional.binary_cross_entropy(d_real, torch.ones(d_real.shape, device=device), reduction="none")
+        loss_fake = torch.nn.functional.binary_cross_entropy(d_fake, torch.zeros(d_fake.shape, device=device), reduction="none")
+
+        self.adv_loss = self.reduce((loss_real+loss_fake)/2)
+        return loss_gen, (loss_gen, self.adv_loss)
 
     def get_named_losses(self, losses):
-        return {'adversarial':losses[0]}
+        return {'gen_loss':losses[0], 'adv_loss':losses[1]}
 
     def step(self, *args, **kwargs):
+        self.adv_loss.backward()
         self.optimizer.step()
+        self.optimizer.zero_grad()
 
 

@@ -86,6 +86,7 @@ class ELBO(CriterionContainer):
                                                    device=out['z_enc'].device)
                 out2 = params2.rsample()
 
+            #pdb.set_trace()
             return {"params1":params1, "params2":params2, "out1":out1, "out2":out2}
 
         # retrieve regularization parameters

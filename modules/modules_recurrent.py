@@ -91,7 +91,6 @@ class GRULayer(RNNLayer):
                     torch.nn.init.orthogonal_(getattr(module, weight))
                 elif 'bias' in weight:
                     torch.nn.init.zeros_(getattr(module, weight))
-        self.flatten_parameters()
         return module
     #     module = self.RecurrentCell(input_dim, output_dim)
     #     torch.nn.init.xavier_normal_(module.weight_ih)
@@ -223,6 +222,7 @@ class RVAEEncoder(HiddenModule):
 
     def make_hidden_layers(self, pins, phidden={"dim": 800, "nlayers": 2, 'label': None, 'conditioning': 'concat'},
                            *args, **kwargs):
+        phidden['batch_norm'] = False
         hidden_module =  super().make_hidden_layers(pins, phidden, *args, **kwargs)
         precurrent = kwargs.get('precurrent') or self.precurrent
         recurrent_module = self.make_recurrent_layer(phidden, precurrent)

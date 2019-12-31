@@ -10,7 +10,7 @@ from . import visualize_dimred as dr
 from ..utils.onehot import fromOneHot, oneHot
 from ..utils import decudify, merge_dicts, CollapsedIds, check_dir, recgetitem, decudify
 from ..utils.dataloader import DataLoader
-from ..utils import get_latent_out
+from ..utils import get_latent_out, get_flatten_meshgrid
 import matplotlib.patches as mpatches
 from matplotlib import colors as mcolors
 from matplotlib.ticker import StrMethodFormatter
@@ -77,15 +77,19 @@ def plot_reconstructions(dataset, model, label=None, n_points=10, out=None, prep
     if out:
         out += '/reconstruction/'
         check_dir(out)
+
     for i in range(len(vae_out['x_params'])):
         multihead_outputs = None
         if plot_multihead and hasattr(model.decoders[0].out_modules[0], 'current_outs'):
             multihead_outputs = model.decoders[0].out_modules[0].current_outs
         if vae_out.get('x_params') is not None:
-            fig, ax = core.plot_distribution(vae_out['x_params'][i], target=data_pp[i], preprocessing=preprocessing, preprocess=preprocess, multihead=multihead_outputs, **kwargs)
+            fig_path = out+'_%s'%name if len(vae_out) == 1 else out+'%s_%d'%(name, i)
+            fig, ax = core.plot_distribution(vae_out['x_params'][i], target=data_pp[i], preprocessing=preprocessing, preprocess=preprocess, multihead=multihead_outputs, out=fig_path, **kwargs)
         fig_reinforced = None
         if vae_out.get('x_reinforced') is not None:
-            fig_reinforced, ax_reinforced = core.plot_distribution(vae_out['x_reinforced'][i], target=data_pp[i], preprocessing=preprocessing, preprocess=preprocess, multihead=multihead_outputs, **kwargs)
+            fig_reinforced, ax_reinforced = core.plot_distribution(vae_out['x_reinforced'][i], target=data_pp[i], preprocessing=preprocessing, preprocess=preprocess, out=out, multihead=multihead_outputs, **kwargs)
+
+    """
     if not out is None:
         if issubclass(type(fig), list):
             for head in range(0, len(fig)):
@@ -101,10 +105,81 @@ def plot_reconstructions(dataset, model, label=None, n_points=10, out=None, prep
 
             if fig_reinforced is not None:
                 fig_reinforced.savefig(out+'/%s_reinforced_%d.pdf'%(name, i), format = 'pdf')
+    """
     figs.append(fig); axes.append(ax)
 
     del data; del vae_out
     return figs, axes
+
+
+def get_plot_subdataset(dataset, n_points=None, partition=None, ids=None):
+    if ids is None:
+        if partition:
+            current_partition = dataset.partitions[partition]
+            ids = current_partition[np.random.permutation(len(current_partition))[:n_points]]
+        else:
+            ids = np.random.permutation(dataset.data.shape[0])[:n_points]
+    dataset = dataset.retrieve(ids)
+    return dataset, ids
+
+
+def grid_latent(dataset, model, layer=-1, reduction=dr.PCA, n_points=None, ids=None, grid_shape=10, scales=[-3.0, 3.0], batch_size=None, loader=None, label=None, out=None, epoch=None, partition=None, **kwargs):
+    n_dims = 2 #n_dims or model.platent[layer]['dim']
+    zs, meshgrids, idxs = get_flatten_meshgrid(n_dims, scales, grid_shape); 
+    idxs_hash = {i:idxs[i] for i in range(len(idxs))}
+
+    latent_dims = model.platent[layer]['dim']
+    if latent_dims > 2:
+        dataset = get_plot_subdataset(dataset, n_points=n_points, partition=partition, ids=ids)
+        Loader = loader if loader else DataLoader
+        loader = Loader(dataset[0], batch_size, is_sequence=model.take_sequences, tasks=label)
+        outs = []
+        with torch.no_grad():
+            for x, y in loader:
+                outs.append(model.encode(model.format_input_data(x)))
+        outs = merge_dicts(outs) 
+        #TODO general sampling
+        data_zs = outs[layer]['out_params'].mean
+        dimred = reduction(n_components=n_dims)
+        dimred.fit_transform(data_zs.cpu().numpy())
+        zs = dimred.inverse_transform(zs)
+
+    with torch.no_grad():
+        outs = model.decode(model.format_input_data(zs), layer=layer)[0]['out_params']
+    
+    grid = torch.zeros(*meshgrids[0].shape, 1, *outs.mean.shape[1:])
+    grid_std = torch.zeros(*meshgrids[0].shape, 1, *outs.mean.shape[1:])
+
+    for n, idx in enumerate(idxs):
+        x, y = idx
+        grid[x, y, 0, :] = outs[n].mean.cpu()
+        grid_std[x, y, 0, :] = outs[n].stddev.cpu()
+
+    grid = grid.view(grid.shape[0]*grid.shape[1], *grid.shape[2:])
+    grid_std = grid_std.view(grid_std.shape[0]*grid_std.shape[1], *grid_std.shape[2:])
+
+    grid_img = make_grid(grid, nrow=grid_shape)
+    grid_std_img = make_grid(grid_std, nrow=grid_shape)
+    
+    epoch = "" if epoch is None else "_%d"%epoch
+    layer = len(model.platent) + layer if layer < 0 else layer
+    if not os.path.isdir(out+'/grid'):
+        os.makedirs(out+'/grid')
+    save_image(grid_img, out+'/grid/grid_%d%s.png'%(layer, epoch))
+    save_image(grid_std_img, out+'/grid/std_grid_%d%s.png'%(layer, epoch))
+
+
+    fig = plt.figure()
+    plt.imshow(grid_img.transpose(0,2), aspect="auto")
+
+    return [fig], [fig.axes]
+
+    
+    
+
+
+
+
 
 
 def image_export(dataset, model, label=None, n_rows=None, ids=None, out=None, partition=None, n_points=10, **kwargs):
@@ -1093,11 +1168,13 @@ def plot_losses(*args, loss=None, out=None, separated=False, axis="time", **kwar
             ax[i,j].set_title(current_loss)
 
     name = kwargs.get('name', 'losses')
+    if not os.path.isdir(out+'/losses'):
+        os.makedirs(out+'/losses')
     if out is not None:
         if separated:
-            [fig[i].savefig(out+'/%s_%s.pdf'%(name, loss_names[i]), format='pdf') for i in range(len(fig))]
+            [fig[i].savefig(out+'/losses/%s_%s.pdf'%(name, loss_names[i]), format='pdf') for i in range(len(fig))]
         else:
-            fig.savefig(out+'/%s.pdf'%name, format='pdf')
+            fig.savefig(out+'/losses/%s.pdf'%name, format='pdf')
 
     return fig, ax
 

@@ -498,3 +498,25 @@ class CollapsedIds(object):
 def check_dir(fold):
     if not os.path.isdir(fold):
         os.makedirs(fold)
+
+
+
+    param_buffer = dict()
+
+def get_flatten_meshgrid(n_dim, scales, n_grid):
+    if not issubclass(type(scales[0]), list):
+        scales = [scales for _ in range(n_dim)]
+    ranges = tuple([np.linspace(scales[n][0], scales[n][1], n_grid) for n in range(n_dim)])
+    meshes = np.meshgrid(*ranges)
+
+    iterator = np.nditer(meshes[0], ['multi_index'])
+    full_z = np.zeros((meshes[0].size, n_dim))
+    current_id = 0; idxs = []
+
+    for _ in iterator:
+        z = np.array([meshes[a][iterator.multi_index] for a in range(n_dim)])
+        full_z[current_id] = z
+        idxs.append(iterator.multi_index)
+        current_id += 1
+    return full_z, meshes, idxs
+

@@ -118,6 +118,7 @@ class MMD(Criterion):
 
         sample1 = params1.rsample() if params1.has_rsample else params1.sample()
         sample2 = params2.rsample() if params2.has_rsample else params2.sample()
+        #pdb.set_trace()
         if len(sample1.shape) > 2 + int(is_sequence):
             sample1 = sample1.contiguous().view(cumprod(sample1.shape[:-1])[-1], sample1.shape[-1])
             sample2 = sample2.contiguous().view(cumprod(sample2.shape[:-1])[-1], sample2.shape[-1])
@@ -175,6 +176,7 @@ class RD(Criterion):
             logdet_error = reduce(regularize_logdets(kwargs['logdets']), self.reduction)
             loss = loss - logdet_error
             losses = losses + (float(logdet_error),)
+
         return loss, losses
 
     def get_named_losses(self, losses):

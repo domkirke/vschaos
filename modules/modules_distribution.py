@@ -51,7 +51,7 @@ def GaussianLayer(pinput, poutput, **kwargs):
     #     take_conv = len(poutput['dim']) != 1
     if poutput.get('conv'):
         take_conv = poutput['conv']
-    take_conv = take_conv or issubclass(type(poutput['dim']), tuple)
+    #take_conv = take_conv or issubclass(type(poutput['dim']), tuple)
     if take_conv:
         return GaussianLayer2D(pinput, poutput, **kwargs)
     else:
@@ -98,12 +98,14 @@ class GaussianLayer1D(nn.Module):
         #TODO sequence shit
         self.is_seq = kwargs.get('is_seq', False)
         
+    #@flatten_seq_method
     def forward(self, ins,  *args, **kwargs):
         '''Outputs parameters of a diagonal normal distribution.
         :param ins : input vector.
         :returns: (torch.Tensor, torch.Tensor)'''
 
         # format
+        #pdb.set_trace()
         n_batch = ins.shape[0]; n_seq = None
         if self.is_seq:
             n_seq = ins.shape[1]
