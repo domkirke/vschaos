@@ -13,6 +13,7 @@ from scipy import ndimage
 from librosa.core import load
 from librosa.output import write_wav
 from ..data.signal.transforms import  computeTransform, inverseTransform
+from ..data import Dataset
 from ..utils.trajectory import get_random_trajectory, get_interpolation
 from ..utils import checklist, check_dir
 
@@ -117,7 +118,12 @@ def overlap_add(sig, axis=0, overlap=None, window_type=None, fusion="stack_right
         # sig_t.__getitem__((*take_all, slice(i*overlap,i*overlap+window))).__iadd__(sig.__getitem__()))
 
 
-def resynthesize_files(model, files, transformOptions, transform=None, preprocessing=None, save='./', sample=False, iterations=50, export_original=True, method="griffin-lim", window=None, overlap=None, norm=True, sequence=False, sequence_overlap=False, predict=False, **kwargs):
+def resynthesize_files(dataset, model, transformOptions=None, transform=None, preprocessing=None, out='./', sample=False, iterations=50, export_original=True, method="griffin-lim", window=None, overlap=None, norm=True, sequence=False, sequence_overlap=False, n_files=10, predict=False, **kwargs):
+    if issubclass(type(dataset), Dataset):
+        files = random.choices(dataset.files, k=n_files)
+    else:
+        files = random.choices(dataset, k=n_files)
+
     transform = transform or transformOptions.get('transformType')
     for i, current_file in enumerate(files):
 
@@ -131,8 +137,8 @@ def resynthesize_files(model, files, transformOptions, transform=None, preproces
         else:
             current_transform, _= load(current_file, sr=transformOptions.get('resampleTo', 22050))
             ct = np.copy(current_transform)
-        path_out = save+'/reconstructions/'+os.path.splitext(os.path.basename(files[i]))[0]+'.wav'
-        original_out = save+'/reconstructions/'+os.path.splitext(os.path.basename(files[i]))[0]+'_original.wav'
+        path_out = out+'/reconstructions/'+os.path.splitext(os.path.basename(files[i]))[0]+'.wav'
+        original_out = out+'/reconstructions/'+os.path.splitext(os.path.basename(files[i]))[0]+'_original.wav'
 
         # pre-processing
         print('synthesizing %s...'%path_out)
@@ -194,7 +200,7 @@ def resynthesize_files(model, files, transformOptions, transform=None, preproces
         torch.cuda.empty_cache()
 
 
-def interpolate_files(vae, dataset, n_files=1, n_interp=10, out=None, preprocessing=None, preprocess=False, projections=None, transformOptions=None, predict=False):
+def interpolate_files(dataset, vae, n_files=1, n_interp=10, out=None, preprocessing=None, preprocess=False, projections=None, transformOptions=None, predict=False, **kwargs):
     for f in range(n_files):
         check_dir('%s/interpolations'%out)
         #sequence_length = loaded_data['script_args'].sequence

@@ -11,6 +11,7 @@ import torch, pdb
 import numpy as np
 import matplotlib.pyplot as plt
 from . import visualize_plotting as lplt
+from .audio_synthesize import resynthesize_files, interpolate_files
 from .audio_descriptor import plot2Ddescriptors,plot3Ddescriptors
 from ..utils import apply_method, checklist
 import tensorboardX
@@ -28,7 +29,9 @@ plot_hash = {'reconstructions': lplt.plot_reconstructions,
              'class_losses':lplt.plot_class_losses,
              'grid_latent':lplt.grid_latent,
              'descriptors_2d':plot2Ddescriptors,
-             'descriptors_3d':plot3Ddescriptors}
+             'descriptors_3d':plot3Ddescriptors,
+             'audio_reconstructions': resynthesize_files,
+             'audio_interpolate': interpolate_files}
 
 
 def dict_merge(dct, merge_dct):

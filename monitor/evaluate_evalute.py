@@ -1,7 +1,7 @@
 import torch, pdb, torch.nn as nn
 import matplotlib.pyplot as plt
 from ..utils import merge_dicts, decudify
-from .baselines import PCABaseline, ICABaseline
+from .evaluate_baselines import PCABaseline, ICABaseline
 
 
 baseline_hash={'PCA':PCABaseline, 'ICA':ICABaseline}
