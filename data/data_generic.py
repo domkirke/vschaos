@@ -385,6 +385,7 @@ class Dataset(torch.utils.data.Dataset):
         newDataset.padded_dims = self.padded_dims
         newDataset.drop_tasks = self.drop_tasks
         newDataset.has_sequences = self.has_sequences
+        newDataset.transformOptions = self.transformOptions
             
         if len(self.partitions) != 0:
             newDataset.partitions = {}

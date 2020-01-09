@@ -88,7 +88,7 @@ def get_divs(n):
 
 # Plotting functions
 
-def plot_mean_1d(dist, x=None, preprocessing=None, axes=None, multihead=None, concat_seq=None, suffix=None, out=None, *args, **kwags):
+def plot_mean_1d(dist, x=None, preprocess=None, preprocessing=None, axes=None, multihead=None, concat_seq=None, suffix=None, out=None, *args, **kwags):
     n_examples = dist.batch_shape[0]
     # create axes
     if axes is None:
@@ -115,9 +115,13 @@ def plot_mean_1d(dist, x=None, preprocessing=None, axes=None, multihead=None, co
     dist_variance = dist.variance.cpu().detach().numpy()
     if torch.is_tensor(x):
         x = x.cpu().detach().numpy()
+
     if preprocessing is not None:
         dist_mean_inv = preprocessing.invert(dist_mean)
-        x_inv = preprocessing.invert(x)
+        if preprocess:
+            x, x_inv = preprocessing(x), x
+        else:
+            x, x_inv = x, preprocessing.invert(x)
 
     seq_stride = 1
     for i in range(n_rows):
@@ -159,7 +163,7 @@ def plot_mean_1d(dist, x=None, preprocessing=None, axes=None, multihead=None, co
             axes.append(axes_m)
 
     if out is not None:
-        fig.savefig(out, format="pdf")
+        fig.savefig(out+'.pdf', format="pdf")
 
     return fig, axes
 

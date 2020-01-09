@@ -128,39 +128,39 @@ class Monitor(object):
             out = self.output_folder
         plt.close('all')
 
-        with torch.no_grad():
-            for plot, plot_args in self.plots.items():
-                plot_args = checklist(plot_args)
-                plot_args = [dict(p) for p in plot_args]
-                print('--monitor : %s, %s'%(plot, plot_args))
+        for plot, plot_args in self.plots.items():
+            plot_args = checklist(plot_args)
+            plot_args = [dict(p) for p in plot_args]
+            print('--monitor : %s, %s'%(plot, plot_args))
 
-                for partition in self.partitions:
-                    if issubclass(type(self.model), (list, tuple)):
-                        for i in range(len(self.model)):
-                            output_name = None if out is None else '/%s_%s_%s_%s'%(plot, partition, epoch, i)
-                            dataset = self.dataset if not issubclass(type(self.dataset), (list, tuple)) else self.dataset[i]
-                            if issubclass(type(losses), (list, tuple)):
-                                plot_args['loss'] = losses[i]
-                            if issubclass(type(reinforcers), (list, tuple)):
-                                plot_args['reinforcers'] = reinforcers[i]
+            for partition in self.partitions:
+                if issubclass(type(self.model), (list, tuple)):
+                    for i in range(len(self.model)):
+                        output_name = None if out is None else '/%s_%s_%s_%s'%(plot, partition, epoch, i)
+                        dataset = self.dataset if not issubclass(type(self.dataset), (list, tuple)) else self.dataset[i]
+                        if issubclass(type(losses), (list, tuple)):
+                            plot_args['loss'] = losses[i]
+                        if issubclass(type(reinforcers), (list, tuple)):
+                            plot_args['reinforcers'] = reinforcers[i]
 
-                            fig, axes = plot_hash[plot](dataset, self.model[i], loader=loader,
-                                                        trainer=trainer, partition=partition, out=out, name=output_name, **plot_args)
-                            self.record_image(fig, '%s_%s_%s'%(plot, partition, i), epoch)
+                        fig, axes = plot_hash[plot](dataset, self.model[i], loader=loader,
+                                                    trainer=trainer, partition=partition, out=out, name=output_name, **plot_args)
+                        self.record_image(fig, '%s_%s_%s'%(plot, partition, i), epoch)
 
-                    else:
-                        output_name = None if out is None else '/%s_%s_%s'%(plot, partition, epoch)
+                else:
+                    output_name = None if out is None else '/%s_%s_%s'%(plot, partition, epoch)
 
-                        for pa in plot_args:
-                            losses = pa.get('loss')
-                            reinforcers = pa.get('reinforcers')
-                            current_name = output_name+'_'+pa.get('name', '')
-                            if pa.get('name'):
-                                current_name = current_name+'_'+pa['name']
-                                del pa['name']
-                            fig, axes = plot_hash[plot](self.dataset, self.model, loader=loader,# preprocessing=preprocessing,
-                                                        trainer=trainer, partition=partition, name=current_name, out=out,epoch=epoch, **pa)
-                            self.record_image(fig, '%s_%s_%s'%(plot, out+'/'+current_name, partition), epoch)
+                    for pa in plot_args:
+                        losses = pa.get('loss')
+                        reinforcers = pa.get('reinforcers')
+                        current_name = output_name+'_'+pa.get('name', '')
+                        if pa.get('name'):
+                            current_name = current_name+'_'+pa['name']
+                            del pa['name']
+
+                        fig, axes = plot_hash[plot](self.dataset, self.model, loader=loader,# preprocessing=preprocessing,
+                                                    trainer=trainer, partition=partition, name=current_name, out=out,epoch=epoch, **pa)
+                        self.record_image(fig, '%s_%s_%s'%(plot, out+'/'+current_name, partition), epoch)
 
         # if image_export:
         #     output_name = None if out is None else out+'/grid%s'%epoch_suffix

@@ -15,7 +15,7 @@ from librosa.output import write_wav
 from ..data.signal.transforms import  computeTransform, inverseTransform
 from ..data import Dataset
 from ..utils.trajectory import get_random_trajectory, get_interpolation
-from ..utils import checklist, check_dir
+from ..utils import checklist, check_dir, choices
 
 
 def path2audio(model, current_z, transformOptions, n_interp=1, order_interp=1, from_layer=-1, out=None, preprocessing=None, graphs=True, norm=True, projection=None, **kwargs):
@@ -117,12 +117,13 @@ def overlap_add(sig, axis=0, overlap=None, window_type=None, fusion="stack_right
     return sig_t
         # sig_t.__getitem__((*take_all, slice(i*overlap,i*overlap+window))).__iadd__(sig.__getitem__()))
 
+def resynthesize_files(dataset, model, transformOptions=None, transform=None, preprocessing=None, out='./', sample=False, iterations=50, export_original=True, method="griffin-lim", window=None, overlap=None, norm=True, sequence=False, sequence_overlap=False, n_files=10, files=None, predict=False, epoch=None, **kwargs):
 
-def resynthesize_files(dataset, model, transformOptions=None, transform=None, preprocessing=None, out='./', sample=False, iterations=50, export_original=True, method="griffin-lim", window=None, overlap=None, norm=True, sequence=False, sequence_overlap=False, n_files=10, predict=False, **kwargs):
-    if issubclass(type(dataset), Dataset):
-        files = random.choices(dataset.files, k=n_files)
-    else:
-        files = random.choices(dataset, k=n_files)
+    if files is None:
+        if issubclass(type(dataset), Dataset):
+            files = choices(dataset.files, k=n_files)
+        else:
+            files = choices(dataset, k=n_files)
 
     transform = transform or transformOptions.get('transformType')
     for i, current_file in enumerate(files):
@@ -137,8 +138,8 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, pr
         else:
             current_transform, _= load(current_file, sr=transformOptions.get('resampleTo', 22050))
             ct = np.copy(current_transform)
-        path_out = out+'/reconstructions/'+os.path.splitext(os.path.basename(files[i]))[0]+'.wav'
-        original_out = out+'/reconstructions/'+os.path.splitext(os.path.basename(files[i]))[0]+'_original.wav'
+        path_out = out+'/audio_reconstruction/'+os.path.splitext(os.path.basename(files[i]))[0]+('' if epoch is None else '_%d'%epoch)+'.wav'
+        original_out = out+'/audio_reconstruction/'+os.path.splitext(os.path.basename(files[i]))[0]+('' if epoch is None else '_%d'%epoch)+'_original.wav'
 
         # pre-processing
         print('synthesizing %s...'%path_out)
@@ -159,9 +160,9 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, pr
         # forward
         t = time.process_time()
         with torch.no_grad():
-            out = model.forward(current_transform, **kwargs)
+            vae_out = model.forward(current_transform, **kwargs)
         print(time.process_time() - t)
-        transform_out = out['x_params'].sample() if sample else out['x_params'].mean
+        transform_out = vae_out['x_params'].sample() if sample else vae_out['x_params'].mean
 
         # invert & export
         if model.pinput['conv']:
@@ -198,6 +199,8 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, pr
         del path_out; del signal_out; del current_transform
         gc.collect(); gc.collect();
         torch.cuda.empty_cache()
+
+        return None, []
 
 
 def interpolate_files(dataset, vae, n_files=1, n_interp=10, out=None, preprocessing=None, preprocess=False, projections=None, transformOptions=None, predict=False, **kwargs):

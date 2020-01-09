@@ -13,18 +13,20 @@ class LogDensity(Criterion):
         super(LogDensity, self).__init__(*args, **kwargs)
 #        self.reduction = 'mean'
 
-    def loss(self, x_params=None, target=None, input_params=None, *args, **kwargs):
-        assert x_params is not None and target is not None and input_params is not None
+    def loss(self, params1=None, params2=None, input_params=None, *args, **kwargs):
+        assert params1 is not None and params2 is not None and input_params is not None
         if issubclass(type(input_params),list):
             if not issubclass(type(target), list):
                 x = [target]
-            losses = tuple([reduce(-x_params[i].log_prob(x[i]), reduction=kwargs.get('reduction','none')) for i in range(len(input_params))])
+            losses = tuple([self.loss(params1[i], params2[i], input_params[i]) for i in range(len(input_params))])
             loss = sum(losses)
-            losses = [l.detach().cpu().numpy() for l in losses]
+            losses = tuple([l.detach().cpu().numpy() for l in losses])
         else:
             #if len(target.shape)==2:
                 #target = target.squeeze(1)
-            loss = reduce(-x_params.log_prob(target), kwargs.get('reduction','none'))
+            if issubclass(type(params2), dist.Distribution):
+                params2 = params2.rsample()
+            loss = reduce(-params1.log_prob(params2), kwargs.get('reduction','none'))
             losses = (float(loss.cpu().detach().numpy()),)
         return loss, losses
 

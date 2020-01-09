@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import torch, numpy as np, os, pdb, copy as copy_module
+import torch, numpy as np, os, pdb, copy as copy_module, random
 from time import time
 from .. import distributions as dist
 import functools
@@ -519,4 +519,17 @@ def get_flatten_meshgrid(n_dim, scales, n_grid):
         idxs.append(iterator.multi_index)
         current_id += 1
     return full_z, meshes, idxs
+
+
+def choices(l, k=1):
+    if hasattr(random, 'choices'):
+        return random.choices(l, k=k)
+    else:
+        if issubclass(type(l), list):
+            return [l[i] for i in np.random.permutation(len(l))[:k]]
+        elif issubclass(type(l), np.ndarray):
+            return l[np.random.permutation(len(l))[:k]]
+        else:
+            raise TypeError('list of type %s is not recognized for function choices'%type(l))
+
 

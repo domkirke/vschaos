@@ -39,9 +39,9 @@ class Adversarial(Criterion):
         optimizer = getattr(torch.optim, alg)([{'params':self.parameters()}], **optim_args)
         self.optimizer = optimizer
 
-    def loss(self, x_params=None, target=None, sample=False, **kwargs):
-        assert x_params is not None; params1 = x_params
-        assert target is not None; params2 = target
+    def loss(self, params1=None, params2=None, sample=False, **kwargs):
+        assert params1 is not None
+        assert params2 is not None
 
         #pdb.set_trace()
         if issubclass(type(params1), dist.Distribution):
@@ -90,7 +90,13 @@ class Adversarial(Criterion):
         return loss_gen, (loss_gen, self.adv_loss)
 
     def get_named_losses(self, losses):
-        return {'gen_loss':losses[0], 'adv_loss':losses[1]}
+        if issubclass(type(losses[0]), (tuple, list)):
+            outs = {}
+            for i,l in enumerate(losses):
+                outs = {**outs, 'gen_loss_%d'%i:l[0], 'adv_loss_%d'%i:l[1]}
+            return outs
+        else:
+            return {'gen_loss':losses[0], 'adv_loss':losses[1]}
 
     def step(self, *args, **kwargs):
         self.adv_loss.backward()

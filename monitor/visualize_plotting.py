@@ -65,6 +65,7 @@ def plot_reconstructions(dataset, model, label=None, n_points=10, out=None, prep
     with torch.no_grad():
         vae_out = model.forward(data_pp, y=metadata, **add_args)
 
+
     if reinforcers is not None:
         vae_out = reinforcers.forward(vae_out)
 

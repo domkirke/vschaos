@@ -126,12 +126,13 @@ class Magnitude(object):
         rep = "<preprocessing Magnitude with pp: %s, pre_norm: %s, post_norm:%s, center:%s>" % (self.preprocessing, self.pre_norm, self.post_norm, self.center)
         return rep
 
-    def __init__(self, preprocessing='none', pre_norm='std', post_norm='std', center=False, log_threshold = None):
+    def __init__(self, preprocessing='none', pre_norm='std', post_norm='std', shrink=1, center=False, log_threshold = None):
         super(Magnitude, self).__init__()
         self.preprocessing = preprocessing
         self.pre_norm = pre_norm; self.post_norm = post_norm
         self.preMax = None; self.postMax = None; self.postMean = None;
         self.center = center
+        self.shrink = shrink
         if log_threshold:
             self.log_threshold = log_threshold
 
@@ -170,7 +171,7 @@ class Magnitude(object):
             data = data - self.postMean
 
         if self.post_norm == "std":
-            self.postMax = np.std(data)
+            self.postMax = np.std(data)*self.shrink
         elif self.post_norm == "max":
             self.postMax = np.max(data)
 
@@ -195,7 +196,10 @@ class Magnitude(object):
             new_data = new_data + self.postMean
 
         if self.preprocessing == 'log':
-            new_data = new_data.exp()
+            if torch.is_tensor(new_data):
+                new_data = new_data.exp()
+            else:
+                new_data = np.exp(new_data)
             new_data[new_data < self.log_threshold] = 0
         elif self.preprocessing == 'log1p':
             if torch.is_tensor(new_data):

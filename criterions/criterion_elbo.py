@@ -60,7 +60,7 @@ class ELBO(CriterionContainer):
         rec_params = []
         x_params = checklist(out['x_params'])
         for i, ip in enumerate(input_params):
-            rec_params.append((callback, {'x_params': x_params[i], 'target': model.format_input_data(target[i]), 'input_params': ip, 'epoch':epoch}, 1.0))
+            rec_params.append((callback, {'params1': x_params[i], 'params2': model.format_input_data(target[i]), 'input_params': ip, 'epoch':epoch}, 1.0))
         return rec_params
 
     def get_regularization_params(self, model, out, epoch=None, beta=None, warmup=None, callback=None):
