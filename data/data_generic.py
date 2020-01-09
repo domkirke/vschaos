@@ -385,7 +385,7 @@ class Dataset(torch.utils.data.Dataset):
         newDataset.padded_dims = self.padded_dims
         newDataset.drop_tasks = self.drop_tasks
         newDataset.has_sequences = self.has_sequences
-        newDataset.transformOptions = self.transformOptions
+        #newDataset.transformOptions = self.transformOptionclass_ids)s
             
         if len(self.partitions) != 0:
             newDataset.partitions = {}
@@ -1142,7 +1142,7 @@ class Dataset(torch.utils.data.Dataset):
         :rtype: :py:class:`Dataset`
         """
         files = list(set(files))
-        translated_files = self.translateFiles(files)
+        translated_files = self.translate_files(files)
         ids = list(set(sum([checklist(self.hash[k]) for k in translated_files], [])))
         return self.retrieve(ids)
 

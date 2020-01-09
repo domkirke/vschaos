@@ -488,6 +488,11 @@ class DatasetAudio(generic.Dataset):
             transformParameters[i]['transformType'] = transformTypes[i]
             np.save(current_transform_dir+'/transformOptions.npy', transformParameters[i])
 
+    def retrieve(self, idx):
+        dataset = super(DatasetAudio, self).retrieve(idx)
+        dataset.transformOptions = self.transformOptions
+        return dataset
+
 
 
 class OfflineDatasetAudio(DatasetAudio):

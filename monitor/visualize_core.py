@@ -335,49 +335,64 @@ def plot(current_z, *args, **kwargs):
     return fig, ax
 
 
-def plot_2d(current_z, meta=None, var=None, classes=None, class_ids=None, class_names=None, cmap='plasma', centroids=None, legend=True):
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    
-    if meta is None or classes is None:
-        meta = np.zeros((current_z.shape[0]))
-        cmap = get_cmap(0)
-    else:
-        cmap = get_cmap(len(classes))
+def plot_2d(current_z, meta=None, var=None, classes=None, class_ids=None, class_names=None, cmap='plasma',
+            sequence=None, shadow_z=None, centroids=None, legend=True):
+    fig = plt.figure(figsize=(8,6))
+    ax = fig.gca()
 
-    current_alpha = 0.06 if (centroids and not meta is None) else 0.9
-    current_var = var if not var is None else np.ones(current_z.shape[0])
-    # plot
-    if current_z.shape[1]==2:
-        ax.scatter(current_z[:, 0], current_z[:,1], c=cmap(meta), alpha = current_alpha, s=current_var)
+    if meta is None:
+        meta = np.zeros((current_z.shape[0]))
+        cmap = get_cmap(0, color_map=cmap)
+        cmap_hash = {0:0}
     else:
-        ax.scatter(current_z[:, 0], current_z[:,1], c=cmap(meta), alpha = current_alpha, s=current_var)
+        cmap = get_cmap(len(classes), color_map=cmap)
+        cmap_hash = {classes[i]:i for i in range(len(classes))}
+
+    current_alpha = 0.06 if (centroids and not meta is None) else 1.0
+    current_var = var if not var is None else np.ones(current_z.shape[0])
+    current_var = (current_var - current_var.mean() / np.abs(current_var).max())+1
+    meta = meta.astype(np.int)
+
+    # plot
+    if sequence:
+        if shadow_z is not None:
+            for i in range(shadow_z.shape[0]):
+                ax.plot(shadow_z[i, :, 0], shadow_z[i, :,1], c=np.array([0.8, 0.8, 0.8, 0.4]))
+        for i in range(current_z.shape[0]):
+            ax.plot(current_z[i, :, 0], current_z[i, :,1], c=cmap(cmap_hash[meta[i]]), alpha = current_alpha)
+            ax.scatter(current_z[i,0,0], current_z[i,0,1], c=cmap(cmap_hash[meta[0]]), alpha = current_alpha, marker='o')
+            ax.scatter(current_z[i,-1,0], current_z[i,-1,1], c=cmap(cmap_hash[meta[0]]), alpha = current_alpha, marker='+')
+    else:
+        cs = np.array([cmap_hash[m] for m in meta])
+        ax.scatter(current_z[:, 0], current_z[:,1], c=cs, alpha = current_alpha, s=current_var)
     # make centroids
     if centroids and not meta is None:
-        for i, cid in enumerate(class_ids):
+        for i, cid in class_ids.items():
             centroid = np.mean(current_z[cid], axis=0)
-            ax.scatter(centroid[0], centroid[1], s = 30, c=cmap(classes[i]))
-            ax.text(centroid[0], centroid[1], class_names[i], color=cmap(classes[i]), fontsize=10)
-    # make legends   
-    if legend and not meta is None:
+            ax.scatter(centroid[0], centroid[1], centroid[2], s = 30, c=cmap(classes[i]))
+            ax.text(centroid[0], centroid[1], centroid[2], class_names[i], color=cmap(classes[i]), fontsize=10)
+    # make legends
+    if legend and not meta is None and not classes is None:
         handles = []
         for cl in classes:
-            patch = mpatches.Patch(color=cmap(cl), label=class_names[cl])
+            patch = mpatches.Patch(color=cmap(cmap_hash[cl]), label=str(class_names[cl]))
             handles.append(patch)
-        fig.legend(handles=handles, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-        
+        ax.legend(handles=handles, loc='upper left', borderaxespad=0.)
+
     return fig, ax
 
 
 def plot_3d(current_z, meta=None, var=None, classes=None, class_ids=None, class_names=None, cmap='plasma', sequence=False, centroids=None, legend=True, shadow_z=None):
-    fig = plt.figure()
+    fig = plt.figure(figsize=(8,6))
     ax = fig.gca(projection='3d')
     
     if meta is None:
         meta = np.zeros((current_z.shape[0]))
-        cmap = get_cmap(0)
+        cmap = get_cmap(0, color_map=cmap)
+        cmap_hash = {0:0}
     else:
-        cmap = get_cmap(len(classes))
+        cmap = get_cmap(len(classes), color_map=cmap)
+        cmap_hash = {classes[i]:i for i in range(len(classes))}
 
     current_alpha = 0.06 if (centroids and not meta is None) else 1.0
     current_var = var if not var is None else np.ones(current_z.shape[0])
@@ -390,14 +405,15 @@ def plot_3d(current_z, meta=None, var=None, classes=None, class_ids=None, class_
             for i in range(shadow_z.shape[0]):
                 ax.plot(shadow_z[i, :, 0], shadow_z[i, :,1], shadow_z[i, :,2], c=np.array([0.8, 0.8, 0.8, 0.4]))
         for i in range(current_z.shape[0]):
-            ax.plot(current_z[i, :, 0], current_z[i, :,1],current_z[i, :,2], c=cmap(meta[i]), alpha = current_alpha)
-            ax.scatter(current_z[i,0,0], current_z[i,0,1],current_z[i,0,2], c=cmap(meta[0]), alpha = current_alpha, marker='o')
-            ax.scatter(current_z[i,-1,0], current_z[i,-1,1],current_z[i,-1,2], c=cmap(meta[0]), alpha = current_alpha, marker='+')
+            ax.plot(current_z[i, :, 0], current_z[i, :,1],current_z[i, :,2], c=cmap(cmap_hash[meta[i]]), alpha = current_alpha)
+            ax.scatter(current_z[i,0,0], current_z[i,0,1],current_z[i,0,2], c=cmap(cmap_hash[meta[0]]), alpha = current_alpha, marker='o')
+            ax.scatter(current_z[i,-1,0], current_z[i,-1,1],current_z[i,-1,2], c=cmap(cmap_hash[meta[0]]), alpha = current_alpha, marker='+')
     else:
+        cs = np.array([cmap_hash[m] for m in meta])
         if current_z.shape[1]==2:
-            ax.scatter(current_z[:, 0], current_z[:,1], np.zeros_like(current_z[:,0]), c=cmap(meta), alpha = current_alpha, s=current_var)
+            ax.scatter(current_z[:, 0], current_z[:,1], np.zeros_like(current_z[:,0]), c=cs, alpha = current_alpha, s=current_var)
         else:
-            ax.scatter(current_z[:, 0], current_z[:,1], current_z[:, 2], c=cmap(meta), alpha = current_alpha, s=current_var)
+            ax.scatter(current_z[:, 0], current_z[:,1], current_z[:, 2], c=cs, alpha = current_alpha, s=current_var)
     # make centroids
     if centroids and not meta is None:
         for i, cid in class_ids.items():
@@ -408,9 +424,9 @@ def plot_3d(current_z, meta=None, var=None, classes=None, class_ids=None, class_
     if legend and not meta is None and not classes is None:
         handles = []
         for cl in classes:
-            patch = mpatches.Patch(color=cmap(cl), label=str(class_names[cl]))
+            patch = mpatches.Patch(color=cmap(cmap_hash[cl]), label=str(class_names[cl]))
             handles.append(patch)
-        ax.legend(handles=handles, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+        ax.legend(handles=handles, loc='upper left', borderaxespad=0.)
         
     return fig, ax
 

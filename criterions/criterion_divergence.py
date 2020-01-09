@@ -42,7 +42,7 @@ class KLD(Criterion):
         loss = reduce(loss, self.reduction);
         losses = (float(loss),)
 
-        return loss, (losses,)
+        return loss, losses
 
     def kl_sampled(self, params1, params2, out1, out2, **kwargs):
         return params2.log_prob(out1) - params1.log_prob(out1)

@@ -55,33 +55,39 @@ def sampleBatchCompute(model, zs, pca, cond, targetDims=None, preprocessing=None
 def plot2Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=10, nb_planes=5, bounds=[-5,5], sample_layer=0,
                   resultTensor=None, preprocessing=None, n_points=None, batch_size=None, loader=None, preprocess=False, out=None, **kwargs):
 
-    ### prepare data IDs
-    ids = None # points ids in database
-    full_ids = CollapsedIds()
-    full_ids.add(None, ids if ids is not None else np.random.permutation(len(dataset.data))[:n_points])
-    ### forwarding
-    if not issubclass(type(label), list) and not label is None:
-        label = [label]
-    # preparing dataloader
-    Loader = loader or DataLoader
-    loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks = label)
-    # forward!
-    output = []
-    with torch.no_grad():
-        for x,y in loader:
-            if not preprocessing is None and preprocess:
-                x = preprocessing(x)
-            output.append(decudify(vae.encode(vae.format_input_data(x), return_shifts=None, y=y, **kwargs)))
-    torch.cuda.empty_cache()
-    vae_out = merge_dicts(output)
+    vae_out = None
+    need_forward = len(list(filter(lambda x: type(x) == type, projections))) != 0
+    if need_forward:
+        ### prepare data IDs
+        ids = None # points ids in database
+        full_ids = CollapsedIds()
+        full_ids.add(None, ids if ids is not None else np.random.permutation(len(dataset.data))[:n_points])
+        ### forwarding
+        if not issubclass(type(label), list) and not label is None:
+            label = [label]
+        # preparing dataloader
+        Loader = loader or DataLoader
+        loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks = label)
+        # forward!
+        output = []
+        with torch.no_grad():
+            for x,y in loader:
+                if not preprocessing is None and preprocess:
+                    x = preprocessing(x)
+                output.append(decudify(vae.encode(vae.format_input_data(x), return_shifts=None, y=y, **kwargs)))
+        torch.cuda.empty_cache()
+        vae_out = merge_dicts(output)
+
     if out is not None:
         out=  out+'/descriptor_2d/'
         check_dir(out)
+
     figs = []; axes = []
     for reduction in projections:
-    # First find boundaries of the space
-        pca = reduction_hash[reduction](n_components=3)
-        pca_out = pca.fit(vae_out[sample_layer])
+        if type(reduction) == type:
+            reduction = reduction_hash[reduction](n_components=3)
+            reduction.fit(vae_out[-1])
+        # First find boundaries of the space
         spaceBounds = np.zeros((3, 2))
         for i in range(3):
             spaceBounds[i, 0] = np.min(bounds[0])
@@ -120,7 +126,7 @@ def plot2Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=10, n
                         points[x*nb_samples + y] = np.array(curPoint)
 
                 print(points.max(), points.min())
-                descVals = sampleBatchCompute(vae, points, pca, label, layer=sample_layer)
+                descVals = sampleBatchCompute(vae, points, reduction, label, layer=sample_layer)
                 for x in range(nb_samples):
                     for y in range(nb_samples):
                         for d in descriptors:
@@ -137,7 +143,7 @@ def plot2Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=10, n
                         plt.ylabel(d)
                         # plt.subplots_adjust(bottom=0.2, left=0.01, right=0.05, top=0.25)
             if (out is not None):
-                plt.savefig(out + '_' +reduction + '_' + dimNames[dim] + '.pdf', bbox_inches='tight');
+                plt.savefig(out + '_' + type(reduction).__name__ + '_' + dimNames[dim] + '.pdf', bbox_inches='tight');
                 plt.close()
 
             figs.append(plt.gcf()); axes.append(plt.gcf().axes)
@@ -178,24 +184,28 @@ def plot3Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=5, nb
                   resultTensor=None, preprocessing=None, n_points=None, batch_size=None, loader=None, preprocess=False, out=None, **kwargs):
 
     ### prepare data IDs
-    ids = None # points ids in database
-    full_ids = CollapsedIds()
-    full_ids.add(None, ids if ids is not None else np.random.permutation(len(dataset.data))[:n_points])
-    ### forwarding
-    if not issubclass(type(label), list) and not label is None:
-        label = [label]
-    # preparing dataloader
-    Loader = loader or DataLoader
-    loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks = label)
-    # forward!
-    output = []
-    with torch.no_grad():
-        for x,y in loader:
-            if not preprocessing is None and preprocess:
-                x = preprocessing(x)
-            output.append(decudify(vae.encode(vae.format_input_data(x), y=y, **kwargs)))
-    torch.cuda.empty_cache()
-    vae_out = merge_dicts(output)
+    # if some projections are just classes, compute them
+    vae_out = None
+    need_forward = len(list(filter(lambda x: type(x) == type, projections))) != 0
+    if need_forward:
+        ids = None # points ids in database
+        full_ids = CollapsedIds()
+        full_ids.add(None, ids if ids is not None else np.random.permutation(len(dataset.data))[:n_points])
+        ### forwarding
+        if not issubclass(type(label), list) and not label is None:
+            label = [label]
+        # preparing dataloader
+        Loader = loader or DataLoader
+        loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks = label)
+        # forward!
+        output = []
+        with torch.no_grad():
+            for x,y in loader:
+                if not preprocessing is None and preprocess:
+                    x = preprocessing(x)
+                output.append(decudify(vae.encode(vae.format_input_data(x), y=y, **kwargs)))
+        torch.cuda.empty_cache()
+        vae_out = merge_dicts(output)
 
     # Create sampling grid
     bounds = np.array([bounds]*3).T
@@ -207,16 +217,16 @@ def plot3Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=5, nb
         out=  out+'/descriptor_3d/'
         check_dir(out)
 
-
     for reduction in projections:
-        pca = reduction_hash[reduction](n_components=3)
-        pca.fit(vae_out[-1])
+        if type(reduction) == type:
+            reduction = reduction_hash[reduction](n_components=3)
+            reduction.fit(vae_out[-1])
         # Resulting sampling tensors
         if not loadFrom is None:
             print('loading from %s...' % loadFrom)
             resultTensor = np.load(loadFrom)[None][0]
         elif (resultTensor is None):
-            resultTensor = getDescriptorGrid(samplingGrid3D, vae, pca, label, preprocessing=preprocessing)
+            resultTensor = getDescriptorGrid(samplingGrid3D, vae, reduction, label, preprocessing=preprocessing)
         #        for d in descriptors:
         #            resultTensor[d] = np.zeros((nb_samples, nb_samples, nb_samples))
         #        for x in range(nb_samples):

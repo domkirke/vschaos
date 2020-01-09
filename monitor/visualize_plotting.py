@@ -676,7 +676,6 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
     '''
 
     ### prepare data IDs
-    ids = None # points ids in database
     tasks = checklist(tasks)
     if len(tasks) == 0 or tasks is None:
         tasks = [None] 
@@ -1244,28 +1243,39 @@ def plot_class_losses(dataset, model, evaluators, tasks=None, batch_size=512, pa
 
         for i in range(n_rows):
             for j in range(n_columns):
+                print(t, i,j)
+                # get hash for losses
                 loss_axis = {k: ax[i,j].twinx() for k in eval_results[i*n_columns+j].keys()}
+                # get current losses
                 values = {l: [] for l in eval_dict[list(eval_dict.keys())[0]][i*n_columns+j].keys()}
                 for q, id in enumerate(sorted_class_ids):
                     current_result = eval_dict[id][i*n_columns+j]
-                    print(i, j, current_result)
+                    # print(i, j, current_result)
                     ordered_keys = sorted(list([str(k) for k in current_result.keys()]))
                     color_map = core.get_cmap(len(ordered_keys))
                     for s, k in enumerate(ordered_keys):
                         origin = s
                         height = current_result[k]
-                        print(np.isnan(height), np.isinf(height), height)
+                        # print(np.isnan(height), np.isinf(height), height)
                         if np.isnan(height) or np.isinf(height):
                             height = 0
-                        print(loss_axis.keys())
-                        loss_axis[k].bar(origin + zoom*(2*q+1)/(2*len(sorted_class_ids)), height, width = zoom/len(sorted_class_ids), color=color_map(q))
+                        # print(loss_axis.keys())
+                        try:
+                            loss_axis[k].bar(origin + zoom*(2*q+1)/(2*len(sorted_class_ids)), height, width = zoom/len(sorted_class_ids), color=color_map(q))
+                        except KeyError:
+                            pdb.set_trace()
                         loss_axis[k].set_xlim([-0.5, len(ordered_keys)])
                         loss_axis[k].set_yticks([])
                         if type(current_result[k]) in [list, tuple]:
-                            for i in range(len(current_result[k])):
-                                if not str(k)+"_%d"%i in values.keys():
-                                    values[str(k)+'_%d'%i] = []
-                                    values[str(k)+'_%d'%i].append(float(current_result[k][i])) 
+                            for w in range(len(current_result[k])):
+                                if not str(k)+"_%d"%w in values.keys():
+                                    values[str(k)+'_%d'%w] = []
+                                    del values[str(k)]
+                                values[str(k)+'_%d'%w].append(float(current_result[k][w]))
+
+                            loss_index = ordered_keys.index(str(k))
+                            del ordered_keys[loss_index]
+                            [ordered_keys.insert(loss_index+w, str(k)+"_%d"%w) for w in range(len(current_result[k]))]
                         else:
                             if not str(k) in values.keys():
                                 values[str(k)] = []

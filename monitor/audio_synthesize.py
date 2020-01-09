@@ -117,7 +117,10 @@ def overlap_add(sig, axis=0, overlap=None, window_type=None, fusion="stack_right
     return sig_t
         # sig_t.__getitem__((*take_all, slice(i*overlap,i*overlap+window))).__iadd__(sig.__getitem__()))
 
-def resynthesize_files(dataset, model, transformOptions=None, transform=None, preprocessing=None, out='./', sample=False, iterations=50, export_original=True, method="griffin-lim", window=None, overlap=None, norm=True, sequence=False, sequence_overlap=False, n_files=10, files=None, predict=False, epoch=None, **kwargs):
+def resynthesize_files(dataset, model, transformOptions=None, transform=None, preprocessing=None, out='./',
+                       sample=False, iterations=50, export_original=True, method="griffin-lim", window=None,
+                       overlap=None, norm=True, sequence=False, sequence_overlap=False, n_files=10, files=None,
+                       predict=False, epoch=None, **kwargs):
 
     if files is None:
         if issubclass(type(dataset), Dataset):
@@ -127,19 +130,19 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, pr
 
     transform = transform or transformOptions.get('transformType')
     for i, current_file in enumerate(files):
-
         # get transform from file
         if transform is not None:
             if issubclass(type(transform), (list, tuple)):
                 transform = transform[0]
             current_transform = computeTransform([current_file], transform, transformOptions)[0]
             current_transform = np.array(current_transform)
-            ct = np.copy(current_transform)
+            # ct = np.copy(current_transform)
         else:
             current_transform, _= load(current_file, sr=transformOptions.get('resampleTo', 22050))
-            ct = np.copy(current_transform)
-        path_out = out+'/audio_reconstruction/'+os.path.splitext(os.path.basename(files[i]))[0]+('' if epoch is None else '_%d'%epoch)+'.wav'
-        original_out = out+'/audio_reconstruction/'+os.path.splitext(os.path.basename(files[i]))[0]+('' if epoch is None else '_%d'%epoch)+'_original.wav'
+        originalPhase = np.angle(current_transform)
+            # ct = np.copy(current_transform)
+        path_out = out+'/audio_reconstruction/'+os.path.splitext(os.path.basename(current_file))[0]+('' if epoch is None else '_%d'%epoch)+'.wav'
+        original_out = out+'/audio_reconstruction/'+os.path.splitext(os.path.basename(current_file))[0]+('' if epoch is None else '_%d'%epoch)+'_original.wav'
 
         # pre-processing
         print('synthesizing %s...'%path_out)
@@ -182,7 +185,7 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, pr
             current_transform = overlap_add(current_transform, overlap=overlap, window_type=np.hamming, fusion="overlap_add")
 
         if transform is not None:
-            signal_out = inverseTransform(transform_out, transform, {'transformParameters':transformOptions}, iterations=iterations, method=method)
+            signal_out = inverseTransform(transform_out, transform, {'transformParameters':transformOptions}, originalPhase=originalPhase, iterations=iterations, method=method)
         else:
             signal_out = transform_out
 
@@ -193,14 +196,15 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, pr
         # export original in case
         if export_original:
             if transform:
-                current_transform = inverseTransform(current_transform.squeeze(), transform, {'transformParameters':transformOptions}, iterations=iterations, method=method)
+                current_transform = inverseTransform(current_transform.squeeze(), transform, {'transformParameters':transformOptions},
+                                                     originalPhase=originalPhase,iterations=iterations, method=method)
             write_wav(original_out, current_transform, transformOptions.get('resampleTo', 22050), norm=norm)
 
         del path_out; del signal_out; del current_transform
         gc.collect(); gc.collect();
         torch.cuda.empty_cache()
 
-        return None, []
+    return None, []
 
 
 def interpolate_files(dataset, vae, n_files=1, n_interp=10, out=None, preprocessing=None, preprocess=False, projections=None, transformOptions=None, predict=False, **kwargs):

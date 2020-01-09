@@ -12,7 +12,7 @@ class ReconstructionEvaluation(Evaluation):
         # Evaluate classical reconstruction losses
         reconstruction_loss = LogDensity() + MSE() + L1()
         reduction = kwargs.get('reduction', 'none'); reconstruction_loss.reduction = reduction
-        rec_out, rec_losses = reconstruction_loss(x_params=vae_out['x_params'], target=target, input_params=input_params)
+        rec_out, rec_losses = reconstruction_loss(params1=vae_out['x_params'], params2=target, input_params=input_params)
         return {**reconstruction_loss.get_named_losses(rec_losses)}
 
     def evaluate(self, outputs, target=None, model=None, **kwargs):

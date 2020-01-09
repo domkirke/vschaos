@@ -187,7 +187,7 @@ class SpectralLoss(Criterion):
         if sample:
             x_valued = x_params.rsample() if x_params.has_rsample else x_params.sample()
         else:
-            if issubclass(type(x_params), (dist.Normal, dist.WeinerProcess, dist.Bernoulli)):
+            if issubclass(type(x_params), (dist.Normal, dist.priors.WienerProcess, dist.Bernoulli)):
                 x_valued = x_params.mean
             elif issubclass(type(x_params), dist.Categorical):
                 x_probs = x_params.probs

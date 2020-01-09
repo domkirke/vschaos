@@ -16,8 +16,8 @@ class LogDensity(Criterion):
     def loss(self, params1=None, params2=None, input_params=None, *args, **kwargs):
         assert params1 is not None and params2 is not None and input_params is not None
         if issubclass(type(input_params),list):
-            if not issubclass(type(target), list):
-                x = [target]
+            if not issubclass(type(params2), list):
+                x = [params2]
             losses = tuple([self.loss(params1[i], params2[i], input_params[i]) for i in range(len(input_params))])
             loss = sum(losses)
             losses = tuple([l.detach().cpu().numpy() for l in losses])
