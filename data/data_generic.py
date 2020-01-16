@@ -1126,6 +1126,7 @@ class Dataset(torch.utils.data.Dataset):
         :return: translated files
         :rtype: list(str)
         """
+
         if self.dataPrefix.split('/')[-1] not in files[0]:
             raise Exception('given files do not seem in current dataset')
         oldRoot = files[0][:re.search(self.dataPrefix.split('/')[-1], files[0]).regs[0][1]]
