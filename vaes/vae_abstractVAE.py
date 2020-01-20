@@ -189,7 +189,7 @@ class AbstractVAE(nn.Module):
         for k,v in init_args['kwargs'].items():
             init_args[k] = v
         del init_args['kwargs']
-        cls.__module__ = "__main__"
+        #cls.__module__ = "__main__"
         vae = cls(**pickle['init_args'])
         vae.load_state_dict(pickle['state_dict'])
         if with_optimizer:

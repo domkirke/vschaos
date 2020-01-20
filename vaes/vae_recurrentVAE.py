@@ -134,19 +134,23 @@ class VRNN(VanillaVAE):
 class ShrubVAE(VanillaVAE):
     HiddenModuleClass = [RVAEEncoder, RVAEDecoder]
     take_sequences=True
+    loaded_encoder=False
+    loaded_decoder=False
 
     def init_modules(self, input_params, latent_params, hidden_params, *args, **kwargs):
         hidden_params = checklist(hidden_params)
         encoder = None; decoder = None
         self.teacher_prob = kwargs.get('teacher_prob', 0.) # 0 means only decoder's zs, 1 means only encoders' zs (if available)
         self.teacher_warmup = kwargs.get('teacher_warmup', 0)
+        super(ShrubVAE, self).init_modules(input_params, latent_params, hidden_params,
+                             encoder = encoder, decoder = decoder, *args, **kwargs)
         if hidden_params[0].get('load'):
             loaded_data = torch.load(hidden_params[0]['load'], map_location="cpu")
             vae = loaded_data['class'].load(loaded_data)
-            encoder = vae.encoders[0]; decoder = vae.decoders[0]
-
-        super().init_modules(input_params, latent_params, hidden_params,
-                             encoder = encoder, decoder = decoder, *args, **kwargs)
+            #if hidden_params[0].get('load') in ["encoder", "full"]:
+            self.encoders[0] = vae.encoders[0]; self.loaded_encoder=True
+            #elif hidden_params[0].get('load') == ["decoder", "full"]:
+            self.decoders[0] = vae.decoders[0]; self.loaded_decoder = True
         self.precurrent = kwargs.get('recurrent_params')
         if not hasattr(self, 'requires_recurrent'):
             self.requires_recurrent = False
