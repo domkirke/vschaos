@@ -248,6 +248,7 @@ class GaussianLayer2D(nn.Module):
         return mean_modules, var_modules, weights
 
 
+    @flatten_seq_method
     def forward(self, ins,  *args, indices=None, output_size=None, output_heads=False, **kwargs):
         n_batch = ins.shape[0]; n_seq = None
 

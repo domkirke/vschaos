@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pdb
-from ..utils import checklist, checktuple, Unsqueeze, Reshape, Flatten, split_select, oneHot
+from ..utils import checklist, checktuple, Unsqueeze, Reshape, Flatten, split_select, oneHot, flatten_seq_method
 from . import Sequential
 from copy import deepcopy
 
@@ -1017,6 +1017,7 @@ class DeconvolutionalLatent(ConvolutionalLatent):
             indices = self.encoder.get_pooling_indices(dim)
         return indices
 
+    @flatten_seq_method
     def forward(self, x, *args, y=None, **kwargs):
         """
         forward function of the DeconvolutionalLatent module.

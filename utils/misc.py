@@ -416,7 +416,14 @@ def flatten_seq(func):
 def flatten_seq_method(func):
     @functools.wraps(func)
     def unwrap(self, x, *args, **kwargs):
-        if len(x.shape) < 3:
+        input_nshape = 1
+        if hasattr(self, 'pins'):
+            pins = self.pins
+            if issubclass(type(pins), list):
+                pins = pins[0]
+            if pins.get('conv'):
+                input_nshape += len(self.phidden['kernel_size'][0])
+        if len(x.shape) < 2 + input_nshape:
             return func(self, x, *args, **kwargs)
         n_batch = x.shape[0]; n_seq = x.shape[1]; n_dims = tuple(x.shape[2:])
         x = x.contiguous()

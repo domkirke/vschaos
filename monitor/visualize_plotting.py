@@ -730,6 +730,8 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
         # transform in case
         if full_z.shape[-1] > 3 and not sequence:
             assert transformation, 'if dimensionality > 3 please specify the transformation keyword'
+            if issubclass(type(transformation), list):
+                transformation = transformation[layer]
             if len(full_z.shape) == 3:
                 full_z = full_z.reshape(full_z.shape[0]*full_z.shape[1], *full_z.shape[2:])
             if issubclass(type(transformation), type):
@@ -776,8 +778,169 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
     return figs, axes
 
 
+def plot_latent_dim(dataset, model, label=None, tasks=None, n_points=None, layers=None, legend=True, out=None, ids=None, transformation=None, name=None,
+                    preprocess=True, loader=None, batch_size=None, balanced=True, preprocessing=None, sample=False, *args, **kwargs):
+    ### prepare data IDs
+    tasks = checklist(tasks)
+    if len(tasks) == 0 or tasks is None:
+        tasks = [None]
+    full_ids = CollapsedIds()
+    if n_points is not None:
+        dataset = dataset.retrieve(np.random.permutation(len(dataset.data))[:n_points])
+    if tasks == [None]:
+        full_ids.add(None, ids if ids is not None else np.random.permutation(len(dataset.data))[:n_points])
+    else:
+        # if n_points is not None:
+        #    ids = np.random.permutation(len(dataset.data))[:n_points]
+        class_ids = {};
+        nclasses = {}
+        for t in tasks:
+            class_ids[t], nclasses[t] = core.get_class_ids(dataset, t, balanced=balanced, ids=ids, split=True)
+            full_ids.add(t, np.concatenate(list(class_ids[t].values())))
 
-def plot_latent_stats(dataset, model, label=None, tasks=None, n_points=None, layers=[0], legend=True, out=None, preprocess=True,
+    ### forwarding
+    if not issubclass(type(label), list) and not label is None:
+        label = [label]
+    # preparing dataloader
+    Loader = loader or DataLoader
+    loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks=label)
+    # forward!
+    output = []
+    with torch.no_grad():
+        for x, y in loader:
+            if not preprocessing is None and preprocess:
+                x = preprocessing(x)
+            output.append(
+                decudify(model.encode(model.format_input_data(x), y=y, return_shifts=False, *args, **kwargs)))
+    torch.cuda.empty_cache()
+    vae_out = merge_dicts(output)
+
+    ### plot!
+    figs = []; axes = []
+    layers = layers or list(range(len(model.platent)))
+    transformation = checklist(transformation)
+    if out:
+        out += "/dims"
+        check_dir(out)
+    # iterate over layers
+    for layer in layers:
+        # sample = True -> sample distirbution; sample = False -> take mean of distribution
+        vae_out[layer]['out'] = checklist(vae_out[layer]['out'])
+        vae_out[layer]['out_params'] = checklist(vae_out[layer]['out_params'])
+        if sample:
+            full_z = np.concatenate([x.cpu().detach().numpy() for x in vae_out[layer]['out']], axis=-1)
+        else:
+            full_z = np.concatenate([x.mean.cpu().detach().numpy() for x in vae_out[layer]['out_params']], axis=0)
+        full_var = np.concatenate([None if not hasattr(x, "stddev") else x.stddev for x in vae_out[layer]['out_params']], axis=0)
+        # transform in case
+        for reduction in transformation:
+            full_z_t = full_z
+            if reduction:
+                if full_z.shape[-1] > 3:
+                    if issubclass(type(reduction), list):
+                        reduction = reduction[layer]
+                    if issubclass(type(reduction), type):
+                        full_z_t = reduction(n_components=3).fit_transform(full_z)
+                    else:
+                        full_z_t = reduction.transform(full_z)
+
+            # iteration over tasks
+            for task in tasks:
+                if task:
+                    meta = np.array(dataset.metadata[task])[full_ids.ids[task]]
+                else:
+                    meta = [None];
+                    class_ids = {None: None};
+                class_names = {v: k for k, v in dataset.classes[task].items()}
+                fig, ax = core.plot_dims(full_z_t[full_ids.get_ids(task)], meta=meta, classes=nclasses[task], class_ids=class_ids, class_names=class_names, legend=legend, var=full_var)
+
+                # register and export
+                fig_name = 'layer %d / task %s' % (layer, task) if task else 'layer%d' % layer
+                fig.suptitle(fig_name)
+                figs.append(fig);
+                axes.append(ax)
+                if not out is None:
+                    name = name or 'dims'
+                    title = out + '/%s_layer%d_%s_%s.pdf' % (name, layer, str(reduction), task)
+                    fig.savefig(title, format="pdf")
+
+    return figs, axes
+
+def plot_latent_consistency(dataset, model, label=None, tasks=None, n_points=None, layers=None, legend=True, out=None, ids=None, transformation=None, name=None,
+                    preprocess=True, loader=None, batch_size=None, partition=None, preprocessing=None, sample=False, *args, **kwargs):
+
+    # get plotting ids
+    if partition is not None:
+        dataset = dataset.retrieve(partition)
+    n_rows, n_columns = core.get_divs(n_points)
+    if ids is None:
+        full_id_list = np.arange(len(dataset))
+        ids = full_id_list[np.random.permutation(len(full_id_list))[:n_points]] if ids is None else ids
+
+    ### forwarding
+    if not issubclass(type(label), list) and not label is None:
+        label = [label]
+    # preparing dataloader
+    Loader = loader or DataLoader
+    loader = Loader(dataset, batch_size, ids=ids, tasks=label)
+    # forward!
+    output = []
+    with torch.no_grad():
+        for x, y in loader:
+            if not preprocessing is None and preprocess:
+                x = preprocessing(x)
+            out_tmp = model.forward(model.format_input_data(x), y=y, **kwargs)
+            output.append(decudify(out_tmp))
+    torch.cuda.empty_cache()
+    vae_out = merge_dicts(output)
+
+    ### plot!
+    figs = []; axes = []
+    layers = layers or list(range(len(model.platent)))
+    transformation = checklist(transformation)
+    if out:
+        out += "/consistency"
+        check_dir(out)
+    # iterate over layers
+    for layer in layers:
+        # sample = True -> sample distirbution; sample = False -> take mean of distribution
+        # transform in case
+        for reduction in transformation:
+            if layer >= len(vae_out['z_params_dec']):
+                continue
+            print(layer)
+            z_enc_params = vae_out['z_params_enc'][layer]; z_dec_params = vae_out['z_params_dec'][layer]
+            full_z_enc = z_enc_params.mean; full_z_dec = z_dec_params.mean
+            full_z_var_enc = None if not hasattr(z_enc_params, "stddev") else z_enc_params.stddev
+            full_z_var_dec = None if not hasattr(z_dec_params, "stddev") else z_dec_params.stddev
+            if reduction:
+                if issubclass(type(reduction), list):
+                    reduction = reduction[layer]
+                if issubclass(type(reduction), type):
+                    reduction = reduction(n_components=3).fit(np.concatenate([full_z_enc, full_z_dec], axis=0))
+                    full_z_enc = reduction(n_components=3).transform(full_z_enc)
+                    full_z_dec = reduction(n_components=3).transform(full_z_dec)
+                else:
+                    full_z_enc = reduction.transform(full_z_enc)
+                    full_z_dec = reduction.transform(full_z_dec)
+
+            # iteration over tasks
+            figs, ax = core.plot_pairwise_trajs([full_z_enc, full_z_dec], var=[full_z_var_enc, full_z_var_dec])
+
+            # register and export
+            for i in range(len(ids)):
+                fig_name = dataset.files[ids[i]] or "consist_%d"%i
+                figs[i].suptitle(fig_name)
+                if not out is None:
+                    name = name or 'dims'
+                    title = out + '/%s_%s_%s_%s.pdf'%(name, str(reduction), layer, i)
+                    figs[i].savefig(title, format="pdf")
+
+    return figs, axes
+
+
+
+def plot_latent_stats(dataset, model, label=None, tasks=None, n_points=None, layers=None, legend=True, out=None, preprocess=True,
                       loader=None, partition=None, batch_size=None, balanced=True, preprocessing=None, *args, **kwargs):
 
     ### prepare data IDs

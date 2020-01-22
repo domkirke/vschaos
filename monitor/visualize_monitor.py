@@ -22,6 +22,8 @@ import collections
 plot_hash = {'reconstructions': lplt.plot_reconstructions,
              'latent_space': lplt.plot_latent3,
              'latent_trajs': lplt.plot_latent_trajs,
+             'latent_dims': lplt.plot_latent_dim,
+             'latent_consistency': lplt.plot_latent_consistency,
              'statistics':lplt.plot_latent_stats,
              'images':lplt.image_export,
              'conv_weights': lplt.plot_conv_weights,
@@ -149,7 +151,6 @@ class Monitor(object):
 
                 else:
                     output_name = None if out is None else '/%s_%s_%s'%(plot, partition, epoch)
-
                     for pa in plot_args:
                         losses = pa.get('loss')
                         reinforcers = pa.get('reinforcers')

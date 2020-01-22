@@ -18,6 +18,9 @@ from ..utils.trajectory import get_random_trajectory, get_interpolation
 from ..utils import checklist, check_dir, choices
 
 
+
+# CORE FUNCTIONS
+
 def path2audio(model, current_z, transformOptions, n_interp=1, order_interp=1, from_layer=-1, out=None, preprocessing=None, graphs=True, norm=True, projection=None, **kwargs):
     # make interpolation
     if order_interp == 0:
@@ -35,18 +38,22 @@ def path2audio(model, current_z, transformOptions, n_interp=1, order_interp=1, f
     model.eval()
     with torch.no_grad():
         if model.take_sequences:
-            z_interp = z_interp.unsqueeze(1)
+            z_interp = z_interp.unsqueeze(0)
         vae_out = model.decode( model.format_input_data(z_interp), from_layer=from_layer, sample=False )
     signal_out = vae_out[0]['out_params'].mean.squeeze()
     if len(signal_out.shape) > 2:
         signal_out = signal_out.reshape(signal_out.shape[0]*signal_out.shape[1], signal_out.shape[2])
+
+    if model.take_sequences:
+        z_interp = z_interp.squeeze(0)
 
     if graphs:
         if projection:
             fig = plt.figure()
             ax_latent = fig.add_subplot(121, projection="3d")
             z_projected = projection.transform(z_interp)
-            #
+            if len(z_projected.shape) > 2:
+                z_projected = z_projected[0]
             ax_latent.plot(z_projected[:,0], z_projected[:, 1], z_projected[:, 2])
             fig.add_subplot(122).imshow(signal_out.cpu().detach().numpy(), aspect='auto')
             fig.savefig(out+'.pdf', format="pdf")
@@ -64,20 +71,6 @@ def path2audio(model, current_z, transformOptions, n_interp=1, order_interp=1, f
     return z_interp
 
 
-def trajectory2audio(model, traj_types, transformOptions, n_trajectories=1, n_steps=64, iterations=10, out=None,  preprocessing=None, **kwargs):
-    # load model
-    if not os.path.isdir(out+'/trajectories'):
-        os.makedirs(out+'/trajectories')
-    paths = []
-    for traj_type in traj_types:
-        for l in range(len(model.platent)):
-            # generate trajectories
-            trajectories = get_random_trajectory(traj_type, model.platent[l]['dim'], n_trajectories, n_steps)
-            # forward trajectory
-            for i,t in enumerate(trajectories):
-                z = path2audio(model, t, transformOptions, n_interp=1, preprocessing=preprocessing, out=out+'/trajectories/%s_%s_%s'%(traj_type, l,  i), iterations=iterations, from_layer=l, **kwargs)
-            paths.append(z)
-    return paths
 
 def window_signal(sig, window, overlap=None, axis=0, window_type=None, pad=True):
     overlap = overlap or window
@@ -117,6 +110,41 @@ def overlap_add(sig, axis=0, overlap=None, window_type=None, fusion="stack_right
     return sig_t
         # sig_t.__getitem__((*take_all, slice(i*overlap,i*overlap+window))).__iadd__(sig.__getitem__()))
 
+
+def get_transform_from_files(files, transform, transformOptions, window=None, take_sequences=False, merge_mode="min"):
+    transform = transform or transformOptions.get('transformType')
+    transform_datas = []
+    for i, current_file in enumerate(files):
+        # get transform from file
+        if transform is not None:
+            if issubclass(type(transform), (list, tuple)):
+                transform = transform[0]
+            current_transform = computeTransform([current_file], transform, transformOptions)[0]
+            current_transform = np.array(current_transform)
+        else:
+            current_transform, _= load(current_file, sr=transformOptions.get('resampleTo', 22050))
+        originalPhase = np.angle(current_transform)
+
+        # window dat
+        if window:
+            overlap = overlap or window
+            current_transform = window_signal(current_transform, window, overlap, axis=0)
+        if take_sequences:
+            current_transform = current_transform[np.newaxis]
+        transform_datas.append(current_transform)
+    if merge_mode == "min":
+        if take_sequences:
+            min_size = min([m.shape[1] for m in transform_datas])
+            transform_datas = [td[:, :min_size] for td in transform_datas]
+        else:
+            min_size = min([m.shape[0] for m in transform_datas])
+            transform_datas = [td[:min_size] for td in transform_datas]
+
+    return transform_datas, originalPhase
+
+
+# HIGH-LEVEL SYNTHESIS METHODS
+
 def resynthesize_files(dataset, model, transformOptions=None, transform=None, preprocessing=None, out='./',
                        sample=False, iterations=50, export_original=True, method="griffin-lim", window=None,
                        overlap=None, norm=True, sequence=False, sequence_overlap=False, n_files=10, files=None,
@@ -148,17 +176,21 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, pr
         print('synthesizing %s...'%path_out)
         if preprocessing:
             current_transform = preprocessing(current_transform)
-        # window data
+        # window dat
         if window:
             overlap = overlap or window
             current_transform = window_signal(current_transform, window, overlap, axis=0)
+        has_sequences = False
+        if hasattr(model, 'take_sequences'):
+            current_transform = current_transform[np.newaxis]
+            has_sequences = True
         # add dimension if the model take conv inputs
         if model.pinput['conv']:
             conv_dim = - (len(checklist(model.pinput['dim'])) + 1)
             current_transform = np.expand_dims(current_transform, axis=conv_dim)
         # make sequences
-        if sequence:
-            current_transform = window_signal(current_transform, sequence, sequence_overlap, axis=0)
+        # if sequence:
+        #     current_transform = window_signal(current_transform, sequence, sequence_overlap, axis=0)
 
         # forward
         t = time.process_time()
@@ -184,6 +216,9 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, pr
             transform_out = overlap_add(transform_out, overlap=overlap, window_type=np.hamming, fusion="overlap_add")
             current_transform = overlap_add(current_transform, overlap=overlap, window_type=np.hamming, fusion="overlap_add")
 
+        if has_sequences:
+            transform_out = transform_out[0]
+            current_transform = current_transform[0]
         if transform is not None:
             signal_out = inverseTransform(transform_out, transform, {'transformParameters':transformOptions}, originalPhase=originalPhase, iterations=iterations, method=method)
         else:
@@ -207,34 +242,64 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, pr
     return None, []
 
 
-def interpolate_files(dataset, vae, n_files=1, n_interp=10, out=None, preprocessing=None, preprocess=False, projections=None, transformOptions=None, predict=False, **kwargs):
+def trajectory2audio(model, traj_types, transformOptions, n_trajectories=1, n_steps=64, iterations=10, out=None,
+                     preprocessing=None, projection=None, **kwargs):
+    # load model
+    if not os.path.isdir(out+'/trajectories'):
+        os.makedirs(out+'/trajectories')
+    paths = []
+    for traj_type in traj_types:
+        for l in range(len(model.platent)):
+            # generate trajectories
+            trajectories = get_random_trajectory(traj_type, model.platent[l]['dim'], n_trajectories, n_steps)
+            # forward trajectory
+            current_proj = projection
+            if issubclass(type(projection), list):
+                projection = projection[l]
+            for i,t in enumerate(trajectories):
+                z = path2audio(model, t, transformOptions, n_interp=1, preprocessing=preprocessing, out=out+'/trajectories/%s_%s_%s'%(traj_type, l,  i), iterations=iterations, from_layer=l, **kwargs)
+            paths.append(z)
+    return paths
+
+
+def interpolate_files(dataset, vae, n_files=1, n_interp=10, out=None, preprocessing=None, preprocess=False,
+                      projections=None, transformType=None, window=None, transformOptions=None, predict=False, **kwargs):
     for f in range(n_files):
         check_dir('%s/interpolations'%out)
         #sequence_length = loaded_data['script_args'].sequence
         #files_to_morph = random.choices(range(len(dataset.data)), k=2)
-        files_to_morph = np.random.permutation(len(dataset.data))[:2]
-        files_morphed = [dataset.files[d] for d in files_to_morph]
+        files_to_morph = choices(dataset.files, k=2)
 
         data_outs = []
+        projections = checklist(projections)
         with torch.no_grad():
-            vae_input = np.concatenate([dataset.data[d][np.newaxis] for d in files_to_morph])
-            if preprocess:
+            vae_input, original_phase = get_transform_from_files(files_to_morph, transformType, transformOptions, window=window, take_sequences=False, merge_mode="min")
+            if preprocessing:
                 vae_input = preprocessing(vae_input)
+            vae_input = np.stack(vae_input, axis=0)
+            if vae.pinput['conv']:
+                conv_dim = - (len(checklist(vae.pinput['dim'])) + 1)
+                vae_input = np.expand_dims(vae_input, axis=conv_dim)
             vae_input = vae.format_input_data(vae_input)
             z_encoded = vae.encode(vae_input,return_shifts=False)
+
             trajs = []
             for l in range(len(vae.platent)):
-
                 # get trajectory between target points
                 traj = get_interpolation(z_encoded[l]['out_params'].mean.cpu().detach(), n_steps=n_interp).float()
                 #data_out = vae.decode([traj], n_steps=sequence_length)[0]['out_params'].mean
                 device = next(vae.parameters()).device; traj = traj.to(device)
                 #1data_outs.append(vae.decode([traj], predict=l==len(vae.platent)-1, from_layer=l)[0]['out_params'].mean)
-                data_outs.append(vae.decode([traj], predict=l==len(vae.platent)-1, inplace=True, from_layer=l)[0]['out_params'].mean)
+                vae_out = vae.decode(traj, predict=l==len(vae.platent)-1, inplace=True, from_layer=l)[0]['out_params'].mean
+                if preprocessing:
+                    vae_out = preprocessing.invert(vae_out)
+                data_outs.append(vae_out)
                 trajs.append(traj)
 
         # plot things
         for l, data_out in enumerate(data_outs):
+            if preprocess:
+                data_out = preprocessing.invert(data_out)
             if projections:
                 grid = gridspec.GridSpec(2,6)
                 steps = np.linspace(0, n_interp-1, 6, dtype=np.int)
@@ -261,21 +326,13 @@ def interpolate_files(dataset, vae, n_files=1, n_interp=10, out=None, preprocess
                         ax.set_xticks([]); ax.set_yticks([])
 
             else:
-                fig, ax = plt.subplots(1, n_interp+2)
-                ax[0].imshow(data_in[0].detach().squeeze(), aspect="auto")
-                for i in range(data_out.shape[0]):
-                    ax[i+1].imshow(preprocessing.invert(data_out[i].squeeze().detach().numpy()), aspect="auto")
-                    ax[i+1].get_xaxis().set_visible(False)
-                    ax[i+1].get_yaxis().set_visible(False)
-                ax[-1].imshow(data_in[1].detach().squeeze(), aspect="auto")
-                ax[ 0].set_title(os.path.basename(files_morphed[0]))
-                ax[-1].set_title(os.path.basename(files_morphed[1]))
+                raise NotImplementedError
 
             for i in range(data_out.shape[0]):
-                signal_out = inverseTransform(preprocessing.invert(data_out[i].squeeze().cpu().detach().numpy()), 'stft', {'transformParameters':transformOptions}, iterations=30, method='griffin-lim')
+                signal_out = inverseTransform(data_out[i].squeeze().cpu().detach().numpy(), 'stft', {'transformParameters':transformOptions}, iterations=30, method='griffin-lim')
                 write_wav('%s/interpolations/morph_%d_%d_%d.wav'%(out,l,f,i), signal_out, transformOptions.get('resampleTo', 22050), norm=True)
 
-            fig.savefig('%s/interpolations/morph_%d_%d_%d.pdf'%(out,l,f,i), format="pdf")
+            fig.savefig('%s/interpolations/morph_%d_%d.pdf'%(out,l,f), format="pdf")
             plt.close('all')
 
 

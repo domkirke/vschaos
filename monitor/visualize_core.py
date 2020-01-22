@@ -13,6 +13,8 @@ from ..utils.onehot import oneHot, fromOneHot
 from ..utils.misc import CollapsedIds
 from sklearn.metrics import confusion_matrix
 import matplotlib.patches as mpatches
+from matplotlib.ticker import FormatStrFormatter
+
 from  ..import distributions as dist
 
 #%% Various utilities for plotting
@@ -380,6 +382,96 @@ def plot_2d(current_z, meta=None, var=None, classes=None, class_ids=None, class_
         ax.legend(handles=handles, loc='upper left', borderaxespad=0.)
 
     return fig, ax
+
+
+def plot_dims(current_z, meta=None, var=None, classes=None, class_ids=None, class_names=None, cmap='plasma', sequence=False, centroids=None, legend=True, shadow_z=None):
+    fig = plt.figure(figsize=(8,6))
+    ax = fig.gca(projection='3d')
+
+    if meta is None:
+        meta = np.zeros((current_z.shape[0]))
+        cmap = get_cmap(0, color_map=cmap)
+        cmap_hash = {0:0}
+    else:
+        cmap = get_cmap(len(classes), color_map=cmap)
+        cmap_hash = {classes[i]:i for i in range(len(classes))}
+
+    # flatten if sequence
+    if len(current_z.shape) == 3:
+        meta_rs = np.ones(current_z.shape[:-1]+(1,))
+        for i in range(current_z.shape[0]):
+            meta_rs[i] *= meta[i]
+        current_z = current_z.reshape(np.cumprod(current_z.shape[:-1])[-1], current_z.shape[-1])
+        meta_rs = meta_rs.reshape(np.cumprod(meta_rs.shape[:-1])[-1], meta_rs.shape[-1])
+        if var is not None:
+            var = var.reshape(np.cumprod(var.shape[:-1])[-1], var.shape[-1])
+        meta = meta_rs[:, 0]
+
+    n_rows, n_columns = get_divs(current_z.shape[-1])
+    fig, ax = plt.subplots(n_rows, n_columns)
+    if n_rows == 1:
+        ax = ax[np.newaxis]
+    if n_columns == 1:
+        ax = ax[:, np.newaxis]
+
+    cs = np.array([cmap_hash[i] for i in meta])
+    current_var = var if var is not None else np.zeros_like(current_z)
+    for i in range(n_rows):
+        for j in range(n_columns):
+            current_dim =  i*n_columns+j
+            ax[i,j].scatter(current_z[:, current_dim], current_var[:, current_dim],
+                          c=cmap(cs), s=0.8, marker=".")
+            #ax[i, j].set_ylim([0, 1])
+            ax[i,j].set_xticklabels(ax[i,j].get_xticks(), {'size':3})
+            ax[i,j].xaxis.set_major_formatter(FormatStrFormatter('%2.g'))
+            ax[i,j].set_yticklabels(ax[i,j].get_yticks(), {'size':3})
+            ax[i,j].yaxis.set_major_formatter(FormatStrFormatter('%2.g'))
+            ax[i,j].set_ylim([0, min(1.0, 1.2*current_var.max())])
+
+
+    # make legends
+    if legend and not meta is None and not classes is None:
+        handles = []
+        for cl in classes:
+            patch = mpatches.Patch(color=cmap(cmap_hash[cl]), label=str(class_names[cl]))
+            handles.append(patch)
+        fig.legend(handles=handles, loc='upper left', borderaxespad=0.)
+
+    return fig, ax
+
+
+def plot_pairwise_trajs(z_pos, meta=None, var=None, classes=None, class_ids=None, class_names=None, cmap='plasma', sequence=False, centroids=None, legend=True, shadow_z=None):
+
+    # # flatten if sequence
+    # if len(current_z.shape) == 3:
+    #     meta_rs = np.ones(current_z.shape[:-1]+(1,))
+    #     for i in range(current_z.shape[0]):
+    #         meta_rs[i] *= meta[i]
+    #     current_z = current_z.reshape(np.cumprod(current_z.shape[:-1])[-1], current_z.shape[-1])
+    #     meta_rs = meta_rs.reshape(np.cumprod(meta_rs.shape[:-1])[-1], meta_rs.shape[-1])
+    #     if var is not None:
+    #         var = var.reshape(np.cumprod(var.shape[:-1])[-1], var.shape[-1])
+    #     meta = meta_rs[:, 0]
+    n_examples = z_pos[0].shape[0]
+    figs = []; axs = []
+    for ex in range(n_examples):
+        current_z = [z_pos[0][ex], z_pos[1][ex]]
+        n_rows, n_columns = get_divs(current_z[0].shape[-1])
+        fig, ax = plt.subplots(n_rows, n_columns, figsize=(8,6))
+        if n_rows == 1:
+            ax = ax[np.newaxis]
+        if n_columns == 1:
+            ax = ax[:,np.newaxis]
+        current_var = None if var is None else [var[0][ex], var[1][ex]]
+        for i in range(n_rows):
+            for j in range(n_columns):
+                current_dim =  i*n_columns+j
+                ax[i,j].plot(current_z[0][:, current_dim])
+                ax[i,j].plot(current_z[1][:, current_dim])
+        figs.append(fig); axs.append(ax)
+
+    return figs, axs
+
 
 
 def plot_3d(current_z, meta=None, var=None, classes=None, class_ids=None, class_names=None, cmap='plasma', sequence=False, centroids=None, legend=True, shadow_z=None):

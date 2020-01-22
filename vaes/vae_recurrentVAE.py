@@ -137,7 +137,7 @@ class ShrubVAE(VanillaVAE):
     loaded_encoder=False
     loaded_decoder=False
 
-    def init_modules(self, input_params, latent_params, hidden_params, *args, **kwargs):
+    def init_modules(self, input_params, latent_params, hidden_params, from_vae=None, *args, **kwargs):
         hidden_params = checklist(hidden_params)
         encoder = None; decoder = None
         self.teacher_prob = kwargs.get('teacher_prob', 0.) # 0 means only decoder's zs, 1 means only encoders' zs (if available)
@@ -372,8 +372,9 @@ class ShrubVAE(VanillaVAE):
         else:
             #TODO dont work with multihed output. check that
             original_shape = current_z.shape[:2]
-            current_out = self.decoders[0](current_z.contiguous().view(current_z.shape[0]*current_z.shape[1], *current_z.shape[2:]))
-            current_out['out_params'] = current_out['out_params'].view(original_shape[0],original_shape[1],*current_out['out_params'].batch_shape[1:])
+            # current_out = self.decoders[0](current_z.contiguous().view(current_z.shape[0]*current_z.shape[1], *current_z.shape[2:]))
+            current_out = self.decoders[0](current_z)
+            # current_out['out_params'] = current_out['out_params'].view(original_shape[0],original_shape[1],*current_out['out_params'].batch_shape[1:])
             if current_out.get('out') is None:
                 current_out['out'] = apply_method(current_out['out_params'], 'rsample')
         logger('last layer decoded')
