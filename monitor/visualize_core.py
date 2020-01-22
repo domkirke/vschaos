@@ -391,8 +391,8 @@ def plot_3d(current_z, meta=None, var=None, classes=None, class_ids=None, class_
         cmap = get_cmap(0, color_map=cmap)
         cmap_hash = {0:0}
     else:
-        cmap = get_cmap(len(classes), color_map=cmap)
-        cmap_hash = {classes[i]:i for i in range(len(classes))}
+        cmap = get_cmap(0, color_map=cmap) if classes is None else get_cmap(len(classes), color_map=cmap)
+        cmap_hash = {None:None} if classes is None else {classes[i]:i for i in range(len(classes))}
 
     current_alpha = 0.06 if (centroids and not meta is None) else 1.0
     current_var = var if not var is None else np.ones(current_z.shape[0])

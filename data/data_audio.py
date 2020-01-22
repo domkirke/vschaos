@@ -217,7 +217,7 @@ class DatasetAudio(generic.Dataset):
             else:
                 curAnalysisFile = os.path.splitext(re.sub(dataDirectory, analysisDirectory+'/'+transformName, f))[0]
                 files = []; idx = 0;
-                name, ext = os.path.splitext(curAnalysisFile)
+                name = curAnalysisFile
                 if os.path.exists(name+'.npz'):
                     files.append(name+'.npz')
                 elif os.path.exists(name+'.npy'):

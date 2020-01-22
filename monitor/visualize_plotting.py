@@ -684,6 +684,7 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
         dataset = dataset.retrieve(np.random.permutation(len(dataset.data))[:n_points])
     if tasks == [None]:
         full_ids.add(None, ids if ids is not None else np.random.permutation(len(dataset.data))[:n_points])
+        nclasses = {None:None}; classes_ids = {}
     else:
         #if n_points is not None:
         #    ids = np.random.permutation(len(dataset.data))[:n_points]
@@ -742,10 +743,10 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
             if task:
                 meta = np.array(dataset.metadata[task])[full_ids.ids[task]]
             else:
-                meta = [None]; class_ids = {None:None}; classes=None; class_names=None
+                meta = None; class_ids = {None:None}; classes=None; class_names=None
 
             legend = legend and len(class_ids)<12
-            if hasattr(meta[0], '__iter__'):
+            if hasattr(checklist(meta)[0], '__iter__'):
                 for k, v in class_ids[task].items():
                     class_names = {v:k for k, v in dataset.classes[task].items()}
                     current_ids = full_ids.transform(v)
@@ -761,7 +762,7 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
                         fig.savefig(title, format="pdf")
                     figs.append(fig); axes.append(ax)
             else:
-                class_names = {v:k for k, v in dataset.classes[task].items()}
+                class_names = {} if len(tasks) > 0 else {v:k for k, v in dataset.classes[task].items()}
                 fig, ax = core.plot(full_z[full_ids.get_ids(task)], meta=meta, var=full_var[full_ids.get_ids(task)], classes=nclasses[task], class_ids=class_ids, class_names=class_names, centroids=centroids, legend=legend)
                 # register and export
                 fig_name = 'layer %d / task %s'%(layer, task) if task else 'layer%d'%layer

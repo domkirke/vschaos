@@ -189,7 +189,7 @@ class Dataset(torch.utils.data.Dataset):
         self.types = options.get("types") or ['mp3', 'wav', 'wave', 'aif', 'aiff', 'au']
         
         # Tasks to import
-        self.tasks = options.get("tasks", [])
+        self.tasks = options.get("tasks", []) or []
         self.taskCallback = [None] * len(self.tasks)
         
         # Partitions in the dataset
