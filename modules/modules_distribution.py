@@ -152,10 +152,10 @@ class GaussianLayer2D(nn.Module):
         if hidden_module:
             self.separate_heads = hidden_module.separate_heads
             self.record_heads = pinput.get('record_heads', True)
-            conv_params = {k: [v[-1]] if issubclass(type(v), list) else [v] for k, v in hidden_module.phidden.items()}
-            conv_params['channels'].append(poutput['channels'])
+            phidden = {k: [v[-1]] if issubclass(type(v), list) else [v] for k, v in hidden_module.phidden.items()}
+            phidden['channels'].append(poutput['channels'])
         """
-        self.conv_params = self.get_conv_params(self.pinput, self.poutput)
+        self.phidden = self.get_phidden(self.pinput, self.poutput)
 
         #TODO pooling specific arguments
         self.pool_target_size = None; output_padding = None
@@ -174,13 +174,13 @@ class GaussianLayer2D(nn.Module):
 
         # separate_vars : if multi-head, defines if each head owns its own variance or if one global variance is defined
         self.separate_vars = kwargs.get('separate_vars', True)
-        self.mean_modules, self.std_modules, weights = self.init_modules(self.conv_params, self.separate_vars)
+        self.mean_modules, self.std_modules, weights = self.init_modules(self.phidden, self.separate_vars)
         if weights is not None:
             self.weights = nn.ParameterList(weights)
 
         self.is_seq = kwargs.get('is_seq', False)
 
-    def get_conv_params(self, pinput, poutput):
+    def get_phidden(self, pinput, poutput):
         # make convolutional arguments from input and output parameters
         in_channels = checklist(pinput.get('channels', 1))[-1]
         out_channels = checklist(poutput.get('channels', 1))[0]
@@ -193,57 +193,57 @@ class GaussianLayer2D(nn.Module):
         conv_dim = pinput.get('conv_dim', len(checktuple(pinput['dim'])))
         windowed = poutput.get('windowed', False)
         output_padding = pinput.get('output_padding', [None])[-1]
-        conv_params = {'channels':[in_channels, out_channels],
+        phidden = {'channels':[in_channels, out_channels],
                        'kernel_size':kernel_size, 'conv_dim':conv_dim,
                        'padding':padding, 'dilation':dilation, 'stride':stride,
                        'windowed':windowed, 'output_padding':output_padding}
         if pinput.get('heads'):
-            conv_params['heads'] = pinput['heads']
+            phidden['heads'] = pinput['heads']
         if pinput.get('pool'):
-            conv_params['pool'] = pinput['pool'][-1]
-        return conv_params
+            phidden['pool'] = pinput['pool'][-1]
+        return phidden
 
-    def get_mean_module(self, conv_params):
+    def get_mean_module(self, phidden):
         # make mean module of the layer
-        deconv_class = conv_params.get('class', [DeconvolutionalLatent])
+        deconv_class = phidden.get('class', [DeconvolutionalLatent])
         deconv_layer = deconv_class[-1].conv_layer
-        mean_module = deconv_layer(conv_params['channels'][0], conv_params['channels'][1], conv_params['conv_dim'],
-                                       conv_params['kernel_size'],
-                                       pool=conv_params.get('pool'),
-                                       dilation=conv_params['dilation'],
-                                       dropout=None, padding=conv_params['padding'],
-                                       stride=conv_params['stride'], windowed=conv_params['windowed'],
-                                       batch_norm=None, nn_lin=None, output_padding=conv_params['output_padding'])
+        mean_module = deconv_layer(phidden['channels'][0], phidden['channels'][1], phidden['conv_dim'],
+                                       phidden['kernel_size'],
+                                       pool=phidden.get('pool'),
+                                       dilation=phidden['dilation'],
+                                       dropout=None, padding=phidden['padding'],
+                                       stride=phidden['stride'], windowed=phidden['windowed'],
+                                       batch_norm=None, nn_lin=None, output_padding=phidden['output_padding'])
         nn.init.xavier_normal_(mean_module._modules['conv_module'].weight)
         return mean_module
 
-    def get_variance_module(self, conv_params):
+    def get_variance_module(self, phidden):
         # make variance module of the layer
-        deconv_class = conv_params.get('class', [DeconvolutionalLatent])
+        deconv_class = phidden.get('class', [DeconvolutionalLatent])
         deconv_layer = deconv_class[-1].conv_layer
-        std_module = deconv_layer(conv_params['channels'][0], 1, conv_params['conv_dim'],
-                                      conv_params['kernel_size'],
-                                      pool=conv_params.get('pool'), nn_lin='Sigmoid',
-                                      dilation=conv_params['dilation'],
-                                      dropout=None, padding=conv_params['padding'],
-                                      stride=conv_params['stride'],
-                                      batch_norm=None,  output_padding=conv_params['output_padding'])
+        std_module = deconv_layer(phidden['channels'][0], 1, phidden['conv_dim'],
+                                      phidden['kernel_size'],
+                                      pool=phidden.get('pool'), nn_lin='Sigmoid',
+                                      dilation=phidden['dilation'],
+                                      dropout=None, padding=phidden['padding'],
+                                      stride=phidden['stride'],
+                                      batch_norm=None,  output_padding=phidden['output_padding'])
         nn.init.xavier_normal_(std_module._modules['conv_module'].weight)
         return std_module
 
-    def init_modules(self, conv_params, separate_vars = False):
-        if conv_params.get('heads'):
-            mean_modules = nn.ModuleList([self.get_mean_module(conv_params) for i in range(conv_params['heads'])])
+    def init_modules(self, phidden, separate_vars = False):
+        if phidden.get('heads'):
+            mean_modules = nn.ModuleList([self.get_mean_module(phidden) for i in range(phidden['heads'])])
             if not separate_vars:
                 # why? there should be just one module?
-                #std_params = dict(conv_params); std_params['channels'][0] = conv_params['channels'][0] * conv_params['heads'][0]
-                var_modules = self.get_variance_module(conv_params)
+                #std_params = dict(phidden); std_params['channels'][0] = phidden['channels'][0] * phidden['heads'][0]
+                var_modules = self.get_variance_module(phidden)
             else:
-                var_modules = nn.ModuleList([self.get_variance_module(conv_params) for i in range(conv_params['heads'])])
-            weights = [nn.Parameter(tensor([1.])) for i in range(conv_params['heads'])]
+                var_modules = nn.ModuleList([self.get_variance_module(phidden) for i in range(phidden['heads'])])
+            weights = [nn.Parameter(tensor([1.])) for i in range(phidden['heads'])]
         else:
-            mean_modules = self.get_mean_module(conv_params)
-            var_modules = self.get_variance_module(conv_params)
+            mean_modules = self.get_mean_module(phidden)
+            var_modules = self.get_variance_module(phidden)
             weights = None
         return mean_modules, var_modules, weights
 
@@ -253,8 +253,8 @@ class GaussianLayer2D(nn.Module):
         n_batch = ins.shape[0]; n_seq = None
 
         #if not any channel dimension, add it
-        if len(ins.shape) <= self.conv_params['conv_dim']+1:
-            ins = ins.unsqueeze(-self.conv_params['conv_dim']-1)
+        if len(ins.shape) <= self.phidden['conv_dim']+1:
+            ins = ins.unsqueeze(-self.phidden['conv_dim']-1)
 
         #TODO verify this sequence thing...!
         is_seq = self.is_seq
@@ -341,10 +341,10 @@ class BernoulliLayer2D(nn.Module):
         if hidden_module:
             self.separate_heads = hidden_module.separate_heads
             self.record_heads = pinput.get('record_heads', True)
-            conv_params = {k: [v[-1]] if issubclass(type(v), list) else [v] for k, v in hidden_module.phidden.items()}
-            conv_params['channels'].append(poutput['channels'])
+            phidden = {k: [v[-1]] if issubclass(type(v), list) else [v] for k, v in hidden_module.phidden.items()}
+            phidden['channels'].append(poutput['channels'])
         """
-        self.conv_params = self.get_conv_params(self.pinput, self.poutput)
+        self.phidden = self.get_phidden(self.pinput, self.poutput)
 
         #TODO pooling specific arguments
         self.pool_target_size = None;
@@ -361,13 +361,13 @@ class BernoulliLayer2D(nn.Module):
             if issubclass(type(self.nn_lin), str):
                 self.nn_lin = getattr(nn, self.nn_lin)(**self.nn_lin_args)
 
-        self.mean_modules, weights = self.init_modules(self.conv_params)
+        self.mean_modules, weights = self.init_modules(self.phidden)
         if weights is not None:
             self.weights = nn.ParameterList(weights)
 
         self.is_seq = kwargs.get('is_seq', False)
 
-    def get_conv_params(self, pinput, poutput):
+    def get_phidden(self, pinput, poutput):
         # make convolutional arguments from input and output parameters
         in_channels = checklist(pinput.get('channels', 1))[-1]
         out_channels = checklist(poutput.get('channels', 1))[0]
@@ -380,36 +380,36 @@ class BernoulliLayer2D(nn.Module):
         conv_dim = pinput.get('conv_dim', len(checktuple(pinput['dim'])))
         windowed = poutput.get('windowed', False)
         output_padding = checklist(pinput.get('output_padding', [None]))[-1]
-        conv_params = {'channels':[in_channels, out_channels],
+        phidden = {'channels':[in_channels, out_channels],
                        'kernel_size':kernel_size, 'conv_dim':conv_dim,
                        'padding':padding, 'dilation':dilation, 'stride':stride,
                        'windowed':windowed, 'output_padding':output_padding}
         if pinput.get('heads'):
-            conv_params['heads'] = pinput['heads']
+            phidden['heads'] = pinput['heads']
         if pinput.get('pool'):
-            conv_params['pool'] = pinput.get('pool', [None])[-1]
-        return conv_params
+            phidden['pool'] = pinput.get('pool', [None])[-1]
+        return phidden
 
-    def get_mean_module(self, conv_params):
+    def get_mean_module(self, phidden):
         # make mean module of the layer
-        deconv_class = conv_params.get('class', [DeconvolutionalLatent])
+        deconv_class = phidden.get('class', [DeconvolutionalLatent])
         deconv_layer = deconv_class[-1].conv_layer
-        mean_module = deconv_layer(conv_params['channels'][0], conv_params['channels'][1], conv_params['conv_dim'],
-                                       conv_params['kernel_size'],
-                                       pool=conv_params.get('pool'),
-                                       dilation=conv_params['dilation'],
-                                       dropout=None, padding=conv_params['padding'],
-                                       stride=conv_params['stride'], windowed=conv_params['windowed'],
-                                       batch_norm=None, nn_lin=None, output_padding=conv_params['output_padding'])
+        mean_module = deconv_layer(phidden['channels'][0], phidden['channels'][1], phidden['conv_dim'],
+                                       phidden['kernel_size'],
+                                       pool=phidden.get('pool'),
+                                       dilation=phidden['dilation'],
+                                       dropout=None, padding=phidden['padding'],
+                                       stride=phidden['stride'], windowed=phidden['windowed'],
+                                       batch_norm=None, nn_lin=None, output_padding=phidden['output_padding'])
         nn.init.xavier_normal_(mean_module._modules['conv_module'].weight)
         return mean_module
 
-    def init_modules(self, conv_params):
-        if conv_params.get('heads'):
-            mean_modules = nn.ModuleList([self.get_mean_module(conv_params) for i in range(conv_params['heads'])])
-            weights = [nn.Parameter(tensor([1.])) for i in range(conv_params['heads'])]
+    def init_modules(self, phidden):
+        if phidden.get('heads'):
+            mean_modules = nn.ModuleList([self.get_mean_module(phidden) for i in range(phidden['heads'])])
+            weights = [nn.Parameter(tensor([1.])) for i in range(phidden['heads'])]
         else:
-            mean_modules = self.get_mean_module(conv_params)
+            mean_modules = self.get_mean_module(phidden)
             weights = None
         return mean_modules, weights
 
@@ -418,8 +418,8 @@ class BernoulliLayer2D(nn.Module):
         n_batch = ins.shape[0]; n_seq = None
 
         # if not any channel dimension, add it
-        if len(ins.shape)<= self.conv_params['conv_dim']+1:
-            ins = ins.unsqueeze(-self.conv_params['conv_dim']-1)
+        if len(ins.shape)<= self.phidden['conv_dim']+1:
+            ins = ins.unsqueeze(-self.phidden['conv_dim']-1)
 
         #TODO verify this sequence thing...!
         is_seq = self.is_seq
@@ -483,10 +483,10 @@ class CategoricalLayer2D(nn.Module):
         if hidden_module:
             self.separate_heads = hidden_module.separate_heads
             self.record_heads = pinput.get('record_heads', True)
-            conv_params = {k: [v[-1]] if issubclass(type(v), list) else [v] for k, v in hidden_module.phidden.items()}
-            conv_params['channels'].append(poutput['channels'])
+            phidden = {k: [v[-1]] if issubclass(type(v), list) else [v] for k, v in hidden_module.phidden.items()}
+            phidden['channels'].append(poutput['channels'])
         """
-        self.conv_params = self.get_conv_params(self.pinput, self.poutput)
+        self.phidden = self.get_phidden(self.pinput, self.poutput)
 
         self.pool_target_size = None;
         self.requires_deconv_indices = False
@@ -502,13 +502,13 @@ class CategoricalLayer2D(nn.Module):
             if issubclass(type(self.nn_lin), str):
                 self.nn_lin = getattr(nn, self.nn_lin)(**self.nn_lin_args)
 
-        self.mean_modules, weights = self.init_modules(self.conv_params)
+        self.mean_modules, weights = self.init_modules(self.phidden)
         if weights is not None:
             self.weights = nn.ParameterList(weights)
 
         self.is_seq = kwargs.get('is_seq', False)
 
-    def get_conv_params(self, pinput, poutput):
+    def get_phidden(self, pinput, poutput):
         # make convolutional arguments from input and output parameters
         in_channels = checklist(pinput.get('channels', 1))[-1]
         out_channels = checklist(poutput.get('channels', 1))[0]
@@ -521,36 +521,36 @@ class CategoricalLayer2D(nn.Module):
         conv_dim = pinput.get('conv_dim', len(checktuple(pinput['dim'])))
         windowed = poutput.get('windowed', False)
         output_padding = checklist(pinput.get('output_padding', [None]))[-1]
-        conv_params = {'channels':[in_channels, out_channels],
+        phidden = {'channels':[in_channels, out_channels],
                        'kernel_size':kernel_size, 'conv_dim':conv_dim,
                        'padding':padding, 'dilation':dilation, 'stride':stride,
                        'windowed':windowed, 'output_padding':output_padding}
         if pinput.get('heads'):
-            conv_params['heads'] = pinput['heads']
+            phidden['heads'] = pinput['heads']
         if pinput.get('pool'):
-            conv_params['pool'] = pinput.get('pool', [None])[-1]
-        return conv_params
+            phidden['pool'] = pinput.get('pool', [None])[-1]
+        return phidden
 
-    def get_mean_module(self, conv_params):
+    def get_mean_module(self, phidden):
         # make mean module of the layer
-        deconv_class = conv_params.get('class', [DeconvolutionalLatent])
+        deconv_class = phidden.get('class', [DeconvolutionalLatent])
         deconv_layer = deconv_class[-1].conv_layer
-        mean_module = deconv_layer(conv_params['channels'][0], conv_params['channels'][1], conv_params['conv_dim'],
-                                       conv_params['kernel_size'],
-                                       pool=conv_params.get('pool'),
-                                       dilation=conv_params['dilation'],
-                                       dropout=None, padding=conv_params['padding'],
-                                       stride=conv_params['stride'], windowed=conv_params['windowed'],
-                                       batch_norm=None, nn_lin='Softmax', output_padding=conv_params['output_padding'])
+        mean_module = deconv_layer(phidden['channels'][0], phidden['channels'][1], phidden['conv_dim'],
+                                       phidden['kernel_size'],
+                                       pool=phidden.get('pool'),
+                                       dilation=phidden['dilation'],
+                                       dropout=None, padding=phidden['padding'],
+                                       stride=phidden['stride'], windowed=phidden['windowed'],
+                                       batch_norm=None, nn_lin='Softmax', output_padding=phidden['output_padding'])
         nn.init.xavier_normal_(mean_module._modules['conv_module'].weight)
         return mean_module
 
-    def init_modules(self, conv_params):
-        if conv_params.get('heads'):
-            mean_modules = nn.ModuleList([self.get_mean_module(conv_params) for i in range(conv_params['heads'])])
-            weights = [nn.Parameter(tensor([1.])) for i in range(conv_params['heads'])]
+    def init_modules(self, phidden):
+        if phidden.get('heads'):
+            mean_modules = nn.ModuleList([self.get_mean_module(phidden) for i in range(phidden['heads'])])
+            weights = [nn.Parameter(tensor([1.])) for i in range(phidden['heads'])]
         else:
-            mean_modules = self.get_mean_module(conv_params)
+            mean_modules = self.get_mean_module(phidden)
             weights = None
         return mean_modules, weights
 
@@ -559,8 +559,8 @@ class CategoricalLayer2D(nn.Module):
         n_batch = ins.shape[0]; n_seq = None
 
         # if not any channel dimension, add it
-        if len(ins.shape) <= self.conv_params['conv_dim']+1:
-            ins = ins.unsqueeze(-self.conv_params['conv_dim']-1)
+        if len(ins.shape) <= self.phidden['conv_dim']+1:
+            ins = ins.unsqueeze(-self.phidden['conv_dim']-1)
 
         #TODO verify this sequence thing...!
         is_seq = self.is_seq

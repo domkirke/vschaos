@@ -417,12 +417,13 @@ def flatten_seq_method(func):
     @functools.wraps(func)
     def unwrap(self, x, *args, **kwargs):
         input_nshape = 1
-        if hasattr(self, 'pins'):
-            pins = self.pins
-            if issubclass(type(pins), list):
-                pins = pins[0]
-            if pins.get('conv'):
-                input_nshape += len(self.phidden['kernel_size'][0])
+        poutput = None if not hasattr(self, 'poutput') else self.poutput
+        phidden = None if not hasattr(self, 'phidden') else self.phidden
+        if phidden:
+            if issubclass(type(phidden), list):
+                phidden = phidden[0]
+            if phidden.get('channels'):
+                input_nshape += len(checktuple(phidden['kernel_size'][0])) 
         if len(x.shape) < 2 + input_nshape:
             return func(self, x, *args, **kwargs)
         n_batch = x.shape[0]; n_seq = x.shape[1]; n_dims = tuple(x.shape[2:])

@@ -911,8 +911,8 @@ def plot_latent_consistency(dataset, model, label=None, tasks=None, n_points=Non
             print(layer)
             z_enc_params = vae_out['z_params_enc'][layer]; z_dec_params = vae_out['z_params_dec'][layer]
             full_z_enc = z_enc_params.mean; full_z_dec = z_dec_params.mean
-            full_z_var_enc = None if not hasattr(z_enc_params, "stddev") else z_enc_params.stddev
-            full_z_var_dec = None if not hasattr(z_dec_params, "stddev") else z_dec_params.stddev
+            full_z_var_enc = None if not hasattr(z_enc_params, "stddev") else z_enc_params.stddev.detach().cpu().numpy()
+            full_z_var_dec = None if not hasattr(z_dec_params, "stddev") else z_dec_params.stddev.detach().cpu().numpy()
             if reduction:
                 if issubclass(type(reduction), list):
                     reduction = reduction[layer]
@@ -924,6 +924,7 @@ def plot_latent_consistency(dataset, model, label=None, tasks=None, n_points=Non
                     full_z_enc = reduction.transform(full_z_enc)
                     full_z_dec = reduction.transform(full_z_dec)
 
+            full_z_enc = full_z_enc.detach().cpu().numpy(); full_z_dec = full_z_dec.detach().cpu().numpy()
             # iteration over tasks
             figs, ax = core.plot_pairwise_trajs([full_z_enc, full_z_dec], var=[full_z_var_enc, full_z_var_dec])
 

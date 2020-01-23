@@ -489,7 +489,7 @@ def plot_3d(current_z, meta=None, var=None, classes=None, class_ids=None, class_
     current_alpha = 0.06 if (centroids and not meta is None) else 1.0
     current_var = var if not var is None else np.ones(current_z.shape[0])
     current_var = (current_var - current_var.mean() / np.abs(current_var).max())+1
-    meta = meta.astype(np.int)
+    meta = np.array(meta).astype(np.int)
 
     # plot
     if sequence:
