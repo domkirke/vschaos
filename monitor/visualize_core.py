@@ -440,7 +440,7 @@ def plot_dims(current_z, meta=None, var=None, classes=None, class_ids=None, clas
     return fig, ax
 
 
-def plot_pairwise_trajs(z_pos, meta=None, var=None, classes=None, class_ids=None, class_names=None, cmap='plasma', sequence=False, centroids=None, legend=True, shadow_z=None):
+def plot_pairwise_trajs(z_pos, var=None, **kwargs):
 
     # # flatten if sequence
     # if len(current_z.shape) == 3:
@@ -466,8 +466,13 @@ def plot_pairwise_trajs(z_pos, meta=None, var=None, classes=None, class_ids=None
         for i in range(n_rows):
             for j in range(n_columns):
                 current_dim =  i*n_columns+j
-                ax[i,j].plot(current_z[0][:, current_dim])
-                ax[i,j].plot(current_z[1][:, current_dim])
+                ax[i,j].plot(current_z[0][:, current_dim], linewidth=0.8, c='b')
+                ax[i,j].plot(current_z[1][:, current_dim], linewidth=0.8, c='r')
+                if current_var is not None:
+                    ax[i,j].plot(current_z[0][:, current_dim] + current_var[0][:, current_dim], c="b", linewidth=0.5, linestyle="-")
+                    ax[i,j].plot(current_z[0][:, current_dim] - current_var[0][:, current_dim], c="b", linewidth=0.5, linestyle="-")
+                    ax[i,j].plot(current_z[1][:, current_dim] + current_var[1][:, current_dim], c="r", linewidth=0.5, linestyle="-")
+                    ax[i,j].plot(current_z[1][:, current_dim] - current_var[1][:, current_dim], c="r", linewidth=0.5, linestyle="-")
         figs.append(fig); axs.append(ax)
 
     return figs, axs

@@ -196,7 +196,6 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, pr
         t = time.process_time()
         with torch.no_grad():
             vae_out = model.forward(current_transform, **kwargs)
-        print(time.process_time() - t)
         transform_out = vae_out['x_params'].sample() if sample else vae_out['x_params'].mean
 
         # invert & export
@@ -216,9 +215,6 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, pr
             transform_out = overlap_add(transform_out, overlap=overlap, window_type=np.hamming, fusion="overlap_add")
             current_transform = overlap_add(current_transform, overlap=overlap, window_type=np.hamming, fusion="overlap_add")
 
-        if has_sequences:
-            transform_out = transform_out[0]
-            current_transform = current_transform[0]
         if transform is not None:
             signal_out = inverseTransform(transform_out, transform, {'transformParameters':transformOptions}, originalPhase=originalPhase, iterations=iterations, method=method)
         else:
