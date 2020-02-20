@@ -71,8 +71,15 @@ class DatasetAudio(generic.Dataset):
 
         # Type of audio-related augmentations
         self.augmentationCallbacks = [];
+        self.preprocessing = None
         # if self.importType == "asynchronous":
         #     self.flattenData = self.flattenDataAsynchronous
+
+    def __getitem__(self, *args, **kwargs):
+        data, metadata = super(DatasetAudio, self).__getitem__(*args, **kwargs)
+        if self.preprocessing:
+            data = self.preprocessing(data)
+        return data, metadata
 
     """
     ###################################
@@ -129,8 +136,8 @@ class DatasetAudio(generic.Dataset):
 
             for f in range(v.shape[0]):
                 curData = checklist(curData)
-                if issubclass(type(curData[f]), list):
-                    self.data.extend(curData[f])
+                if issubclass(type(curData[f]), (list, asyn.OfflineDataList)):
+                    self.data += curData[f]
                     new_files = new_files + [self.files[f]]*len(curData[f])
                     for k, v in self.metadata.items():
                         new_metadata[k].extend([v[f]]*len(curData[f]))
@@ -139,8 +146,6 @@ class DatasetAudio(generic.Dataset):
                     new_files.append(self.files[f])
                     for k, v in self.metadata.items():
                         new_metadata[k].append(v[f])
-
-
         for i, f in enumerate(new_files):
             new_hash[f].append(i)
 
@@ -268,6 +273,19 @@ class DatasetAudio(generic.Dataset):
                 del self.files[i]
         self.hash = {self.files[i]:i for i in range(len(self.files))}
 
+
+    def get_save_dict(self, add_args):
+        return {'transformOptions':self.transformOptions, 'transformName':self.transformName,
+                'preprocessing':self.preprocessing,
+                **super(DatasetAudio, self).get_save_dict(add_args)}
+
+    @classmethod
+    def load_save_dict(self, loaded):
+        dataset = super(DatasetAudio, self).load_save_dict(loaded)
+        dataset.transformOptions = loaded['dataset']['transformOptions']
+        dataset.transformName = loaded['dataset']['transformName']
+        dataset.preprocessing = loaded['dataset']['preprocessing']
+        return dataset
 
     """
     ###################################
@@ -491,6 +509,8 @@ class DatasetAudio(generic.Dataset):
     def retrieve(self, idx):
         dataset = super(DatasetAudio, self).retrieve(idx)
         dataset.transformOptions = self.transformOptions
+        dataset.preprocessing = self.preprocessing
+        dataset.transformName = self.transformName
         return dataset
 
 
@@ -521,6 +541,15 @@ class OfflineDatasetAudio(DatasetAudio):
             else:
                 return self.data[0].shape[0]
 
+    def return_padded(self, *args, max_len=None):
+        for dim in args:
+            self.data.pad_entries(dim) 
+
+    def import_data(self, idList, options, padding=False):
+        super(OfflineDatasetAudio, self).import_data(idList, options, padding=padding)
+        if issubclass(type(self.data), list):
+            self.data = asyn.OfflineDataList(self.data)
+
     def import_audio_data(self, curBatch, options):
         dataPrefix = options.get('dataPrefix')
         dataDirectory = options.get('dataDirectory') or dataPrefix+'/data' or ''
@@ -536,7 +565,7 @@ class OfflineDatasetAudio(DatasetAudio):
         padded = options.get('padded')
         finalData = []
         finalMeta = []
-        for f in curBatch:
+        for i,f in enumerate(curBatch):
             curAnalysisFile = re.sub(dataDirectory, analysisDirectory+'/'+transformName, f)
             curAnalysisFile = ".".join(curAnalysisFile.split(".")[:-1])
             if os.path.exists(curAnalysisFile+'.npy'):
@@ -559,12 +588,12 @@ class OfflineDatasetAudio(DatasetAudio):
 
 
             if issubclass(type(curAnalysisFile), list):
+                print('[%d/%d] adding %s...'%(i, len(curBatch), f))
                 finalData.append(asyn.OfflineDataList([self.entry_class(c) for c in curAnalysisFile], padded=padded))
                 finalMeta.append([0]*len(curAnalysisFile));
             else:
                 finalData.append(self.entry_class(curAnalysisFile))
                 finalMeta.append(0);
-
         return finalData, finalMeta
 
 
@@ -607,13 +636,30 @@ class OfflineDatasetAudio(DatasetAudio):
         self.revHash = revHash
         self.partitions = newPartitions
 
-    def load_offline_entries(self, offline_entries):
-        self.data = np.load(offline_entries)
+    def get_save_dict(self, add_args):
+        save_dict = super(OfflineDatasetAudio, self).get_save_dict(add_args)
+        save_dict['entries'] = self.data
+        return save_dict
 
+    @classmethod
+    def load_save_dict(cls, loaded):
+        dataset = DatasetAudio.load_save_dict(loaded)
+        dataset.data = loaded['dataset']['entries']
+        return dataset
+
+
+
+    def load_offline_entries(self, offline_entries=None):
+        directory = options.get('analysisDirectory', self.analysisDirectory) if offline_entries is None else offline_entries
+        self.data = np.load(directory+'/offline_calls.npy')
+        if os.path.isfile(directory+'/preprocessing.vs'):
+            self.preprocessing = np.load(directory+'/preprocessing.vs')
 
     def save_offline_entries(self, out=None, options={}):
         out = out if out else options.get('analysisDirectory', self.analysisDirectory)
         np.save(out+'/offline_calls.npy', self.data)
+        if self.preprocessing:
+            np.save(out+'/preprocessing.vs', self.preprocessing)
 
 
 

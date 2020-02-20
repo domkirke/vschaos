@@ -889,7 +889,7 @@ def plot_latent_consistency(dataset, model, label=None, tasks=None, n_points=Non
         for x, y in loader:
             if not preprocessing is None and preprocess:
                 x = preprocessing(x)
-            out_tmp = model.forward(model.format_input_data(x), y=y, **kwargs)
+            out_tmp = model.forward(x, y=y, **kwargs)
             output.append(decudify(out_tmp))
     torch.cuda.empty_cache()
     vae_out = merge_dicts(output)
@@ -908,7 +908,6 @@ def plot_latent_consistency(dataset, model, label=None, tasks=None, n_points=Non
         for reduction in transformation:
             if layer >= len(vae_out['z_params_dec']):
                 continue
-            print(layer)
             z_enc_params = vae_out['z_params_enc'][layer]; z_dec_params = vae_out['z_params_dec'][layer]
             full_z_enc = z_enc_params.mean; full_z_dec = z_dec_params.mean
             full_z_var_enc = None if not hasattr(z_enc_params, "stddev") else z_enc_params.stddev.detach().cpu().numpy()

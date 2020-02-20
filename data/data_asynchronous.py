@@ -10,6 +10,7 @@ import pdb
 import re, os, numpy as np
 import librosa.core
 import random
+from ..utils import checktuple
 
 class NoShapeError(Exception):
     pass
@@ -42,7 +43,7 @@ class OfflineEntry(object):
             self.func = func
         self._shape = None
         self._dtype = dtype
-        self.target_length = target_length
+        self.target_length = None if target_length is None else tuple(target_length)
         
     def __call__(self, file=None):
         """
@@ -57,10 +58,10 @@ class OfflineEntry(object):
                 file = file['arr_0']
         data = self.func(file)
         if self.target_length:
-            if data.shape[-1] > self.target_length:
-                data = data[:self.target_length]
-            elif data.shape[-1] < self.target_length:
-                data = np.pad(data, (0, self.target_length - data.shape[-1]), mode="constant", constant_values=0)
+            pads = []
+            for i, tl in enumerate(self.target_length):
+                pads.append((0, tl-data.shape[i]))
+            data = np.pad(data, pads, mode="constant", constant_values=0)
         if not data is None:
             self._shape = data.shape
         if self._dtype:
@@ -70,9 +71,9 @@ class OfflineEntry(object):
     @property
     def shape(self):
         if self._shape is None:
-            raise NoShapeError('OfflineEntry has to be called once to retain shape')
-        else:
-            return self._shape
+            self()
+            #raise NoShapeError('OfflineEntry has to be called once to retain shape')
+        return self._shape
          
 
 
@@ -242,6 +243,9 @@ class OfflineDataList(object):
         else:
             return data.astype(self._dtype)
 
+    def __radd__(self, l):
+        return l + self.entries
+
     def __setitem__(self, idx, elt):
         if issubclass(type(elt), OfflineEntry):
             if not issubclass(type(idx), tuple):
@@ -275,19 +279,22 @@ class OfflineDataList(object):
             outs = [c() for c in current_entries]
             for t, kw in self._transforms:
                 outs = t(outs, **kw)
-
-            return np.array(outs).astype(self._dtype)
+            if self._dtype:
+                return np.array(outs).astype(self._dtype)
+            else:
+                return np.array(outs)
 
         elif type(ids) == int:
             out = self.cast(self.entries[ids]())
             for t, kw in self._transforms:
                 kw = dict(kw)
                 if kw.get('axis') is not None:
-                    kw['axis'] = kw['axis'] - 1
-                    if kw['axis'] < 0:
-                        continue
+                    kw['axis'] = kw['axis'] - 1 if kw['axis'] >= 0 else kw['axis']
                 out = t(out, **kw)
-            return out.astype(self._dtype)
+            if self._dtype:
+                return out.astype(self._dtype)
+            else:
+                return out
         else:
             return self[ids[0]].__getitem__(ids[1:]).astype(self._dtype)
 
@@ -299,20 +306,27 @@ class OfflineDataList(object):
         :type ids: iterable
         :return: list(OfflineEntry)
         """
-        entry_list = type(self)([self.entries[i] for i in ids], transforms=self._transforms, dtype=self.dtype)
+        target_entries = [self.entries[i] for i in ids]
+        entry_list = type(self)(target_entries, transforms=self._transforms)
         return entry_list
 
-    def pad_entries(self, dim=-1):
+    def pad_entries(self, dim=None):
         """
         pad all the entries up to the one with the highest dimension
         :param dim: axis to pad
         :type dim: int
         """
-        shapes = [s._shape[dim] for s in self.entries]
-        self.pad_dim = max(shapes)
+        shapes = np.array([s._shape for s in self.entries]).T
+        dim = dim or tuple(range(len(shapes[0].shape)))
+        maxs_shape = []
+        for d in range(shapes.shape[0]):
+            maxs_shape.append(shapes[d].max())
         new_entries = [None]*len(self.entries)
         for i, entry in enumerate(self.entries):
-            new_entries[i] = type(entry)(entry, target_length = self.pad_dim)
+            current_shape = shapes[:, i]
+            for d in dim:
+                current_shape[d] = maxs_shape[d]
+            new_entries[i] = type(entry)(entry, target_length = current_shape)
         self.entries = new_entries
         if self._shape:
             self._shape = (*self._shape[:-1], self.pad_dim)
@@ -353,7 +367,11 @@ class OfflineDataList(object):
              print('Tried to squeeze %s, but shape is missing')
         self._transforms.append((np.expand_dims, {'axis':dim}))
         if self._shape is not None:
-            self._shape = (*self._shape[:dim], 1, *self._shape[dim:])
+            if dim >= 0:
+                self._shape = (*self._shape[:dim], 1, *self._shape[dim:])
+            else:
+                self._shape = (*self._shape[:dim+1], 1, *self._shape[dim+1:])
+
 
 
     def __init__(self, *args, selector_gen=selector_take, check=True, dtype=None, stride=None, transforms=None, padded=False):
@@ -370,7 +388,7 @@ class OfflineDataList(object):
         self._shape = None
         self._update_shape = True
         self.pad_dim = None
-        self._dtype = np.dtype(dtype)
+        self._dtype = np.dtype(dtype) if dtype is not None else None
         self._transforms = []
         
         if len(args) == 1:
@@ -383,8 +401,15 @@ class OfflineDataList(object):
                     self._dtype = args[0]._dtype
 
             elif issubclass(type(args[0]), list):
-                assert len(list(filter(lambda x: not issubclass(type(x), self.EntryClass), args[0]))) == 0
-                self.entries = args[0]
+                entries = []
+                for elt in args[0]:
+                    if issubclass(type(elt), self.EntryClass):
+                        entries.append(elt)
+                    elif issubclass(type(elt), OfflineDataList):
+                        entries.extend(elt.entries)
+                assert len(list(filter(lambda x: not issubclass(type(x), self.EntryClass), entries))) == 0
+                self.entries = entries
+
                 # if dtype is None:
                 #     self._dtype = self.entries[0]._dtype
             else:

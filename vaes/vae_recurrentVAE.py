@@ -151,6 +151,7 @@ class ShrubVAE(VanillaVAE):
             self.encoders[0] = vae.encoders[0]; self.loaded_encoder=True
             #elif hidden_params[0].get('load') == ["decoder", "full"]:
             self.decoders[0] = vae.decoders[0]; self.loaded_decoder = True
+            self.platent[0] = checklist(vae.platent)[0]
         self.precurrent = kwargs.get('recurrent_params')
         if not hasattr(self, 'requires_recurrent'):
             self.requires_recurrent = False
@@ -372,9 +373,9 @@ class ShrubVAE(VanillaVAE):
         else:
             #TODO dont work with multihed output. check that
             original_shape = current_z.shape[:2]
-            current_out = self.decoders[0](current_z.contiguous().view(current_z.shape[0]*current_z.shape[1], *current_z.shape[2:]))
-            #current_out = self.decoders[0](current_z)
-            current_out['out_params'] = current_out['out_params'].view(original_shape[0],original_shape[1],*current_out['out_params'].batch_shape[1:])
+            #current_out = self.decoders[0](current_z.contiguous().view(current_z.shape[0]*current_z.shape[1], *current_z.shape[2:]))
+            current_out = self.decoders[0](current_z)
+            #current_out['out_params'] = current_out['out_params'].view(original_shape[0],original_shape[1],*current_out['out_params'].batch_shape[1:])
             if current_out.get('out') is None:
                 current_out['out'] = apply_method(current_out['out_params'], 'rsample')
         logger('last layer decoded')

@@ -40,5 +40,5 @@ class Reshape(nn.Module):
         self.shape = tuple([int(s) for s in shape])
 
     def forward(self, x, *args, **kwargs):
-        shape = (x.shape[0], *self.shape)
+        shape = (*x.shape[0:-1], *self.shape)
         return torch.reshape(x, shape)

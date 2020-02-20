@@ -39,6 +39,8 @@ def run(self, loader, preprocessing=None, epoch=None, optimize=True, schedule=Fa
             train_losses.append(losses)
         except NaNError:
             pdb.set_trace()
+        #except Exception as e:
+        #    pdb.set_trace()
 
         # trace
         if self.trace_mode == "batch":

@@ -52,29 +52,36 @@ torch.manual_seed(0)
 # overriding DataParallel to allow distribution parallelization
 # tests for sub-commit
 
-DataParallel = torch.nn.DataParallel
 
-def gather(self, *args, **kwargs):
-    return utils.gather(*args, **kwargs)
+class DataParallel(torch.nn.DataParallel):
+    def gather(self, *args, **kwargs):
+        return utils.gather(*args, **kwargs)
 
-def __getattr(self, attribute):
-    try:
-        return super(DataParallel, self).__getattr__(attribute)
-    except AttributeError:
-        return getattr(self.module, attribute)
+    def __getattr__(self, attribute):
+        try:
+            return super(DataParallel, self).__getattr__(attribute)
+        except AttributeError:
+            return getattr(self.module, attribute)
 
-def scatter(self, inputs, kwargs, device_ids):
-    return utils.scatter_kwargs(inputs, kwargs, device_ids, dim=self.dim)
+    def scatter(self, inputs, kwargs, device_ids):
+        return utils.scatter_kwargs(inputs, kwargs, device_ids, dim=self.dim)
 
+
+"""
+    def forward(self, *args, **kwargs):
+        args = list(args)
+        for i in range(len(args)):
+            if torch.is_tensor(args[i]):
+                if args[i].shape[0] < len(self.device_ids):
+                    args[i] = args[i].repeat(len(self.device_ids), *args[i].shape[1:])
+        return super(DataParallel, self).forward(*tuple(args),**kwargs)
+"""
 
 def load(path, **kwargs):
     loaded_data = torch.load(path, **kwargs)
     return loaded_data
 
 
-DataParallel.gather = gather
-DataParallel.__getattr__ = __getattr
-DataParallel.scatter = scatter
 from . import utils
 from . import distributions
 from . import criterions

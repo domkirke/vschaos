@@ -65,7 +65,7 @@ def concat_prediction(self, vae_out, prediction_out, n_preds=None, teacher_prob=
     return vae_out
 
 
-def forward_and_predict(self, x, *args, n_preds=None, predict=True, **kwargs):
+def forward_and_predict(self, x, n_preds=None, predict=True, *args, **kwargs):
     n_preds = n_preds or self.n_predictions
     if n_preds >= (x.shape[1] - 1):
         raise Exception('cannot prediction %d items for sequence of size %d'%(n_preds, x.shape[1]))
@@ -145,7 +145,6 @@ def prediction_get_dict(self, *args, **kwargs):
     # prediction_dict = self.prediction_class.get_dict(self, **kwargs)
     # return {'vae':vae_dict, 'prediction':prediction_dict}
 
-
 def get_prediction_vae(vae_class, prediction_class, name=None):
     class_name = name or '%s%s'%(vae_class.__name__, prediction_class.__name__)
     new_class = type(class_name, (vae_class, prediction_class), {})
@@ -175,12 +174,17 @@ class PredictionModule(nn.Module):
     PredictionClass = FlowPrediction
     take_sequences = True
     requires_recurrent = False
-    def __init__(self, *args, prediction_params=None, **kwargs):
+    def __init__(self, *args, prediction_params=None, device=None, **kwargs):
         self.init_predictor(prediction_params)
         self.prediction_params = prediction_params
         self.n_predictions = prediction_params['n_predictions']
         self.teacher_prob = prediction_params.get('teacher_prob', 0)
         self.teacher_warmup = prediction_params.get('teacher_warmup', 0)
+        self.device = 'cpu' if device < 0 else 'cuda:%d'%device
+        self.is_cuda = self.device != 'cpu'
+        if self.is_cuda:
+            self.cuda(torch.device(self.device).index)
+
 
     @property
     def encode_predictions(self):

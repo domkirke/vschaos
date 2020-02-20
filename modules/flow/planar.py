@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import torch
+import torch, pdb
 from torch import nn
 from torch.nn import functional as F
 # Internal imports
@@ -34,6 +34,7 @@ class PlanarFlow(Flow):
         else:
             bias, scale, weight = self.bias, self.scale, self.weight
         z = z.unsqueeze(2)
+        #pdb.set_trace()
         f_z = torch.bmm(weight, z) + bias
         return (z + scale * torch.tanh(f_z)).squeeze(2)
 

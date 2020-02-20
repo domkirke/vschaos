@@ -1,4 +1,4 @@
-import torch
+import torch, pdb
 from . import TransformedDistribution
 from torch.distributions.utils import _sum_rightmost
 # from ..modules.flow import flow
@@ -42,6 +42,7 @@ class FlowDistribution(TransformedDistribution):
             full_x = []
         self.flow.amortization(x_0, aux=aux_in)
         for i, flow in enumerate(self.flow.blocks):
+            #pdb.set_trace()
             x = flow(x)
             if retain:
                 full_x.append(x.unsqueeze(1))

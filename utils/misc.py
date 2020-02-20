@@ -417,6 +417,7 @@ def flatten_seq_method(func):
     @functools.wraps(func)
     def unwrap(self, x, *args, **kwargs):
         input_nshape = 1
+        """
         poutput = None if not hasattr(self, 'poutput') else self.poutput
         phidden = None if not hasattr(self, 'phidden') else self.phidden
         if phidden:
@@ -424,8 +425,12 @@ def flatten_seq_method(func):
                 phidden = phidden[0]
             if phidden.get('channels'):
                 input_nshape += len(checktuple(phidden['kernel_size'][0])) 
+        """
+        if hasattr(self, "in_channels"):
+            input_nshape += 1
         if len(x.shape) < 2 + input_nshape:
             return func(self, x, *args, **kwargs)
+        #pdb.set_trace()
         n_batch = x.shape[0]; n_seq = x.shape[1]; n_dims = tuple(x.shape[2:])
         x = x.contiguous()
         x = x.view(n_batch * n_seq, *n_dims)

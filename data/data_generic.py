@@ -349,6 +349,7 @@ class Dataset(torch.utils.data.Dataset):
             # retrieve the corresponding partition ids
             if not idx in self.partitions.keys():
                 raise IndexError('%s is not a partition of current dataset'%idx)
+
             idx = self.partitions[idx]
             if type(idx[0]) == str or type(idx[0]) == np.str_:
                 # if the partition are files, get ids from files
@@ -376,7 +377,8 @@ class Dataset(torch.utils.data.Dataset):
         if len(self.files) != 0:
             newDataset.files = np.array(self.files)[idx].tolist()
         if self.hash != {}:
-            newDataset.hash = {newDataset.files[i]:checklist(i) for i in range(len(newDataset.files))}
+            new_files = np.array(newDataset.files)
+            newDataset.hash = {i:np.where(new_files==i)[0].tolist() for i in list(set(newDataset.files))}
         if self.augmentationCallbacks != []:
             newDataset.augmentationCallbacks = self.augmentationCallbacks
         if self.labels != []:
@@ -443,22 +445,35 @@ class Dataset(torch.utils.data.Dataset):
                 'importCallback':self.importCallback, 'types':self.types, 'tasks':self.tasks, 'taskCallback':self.taskCallback, 'metadataFiles':self.metadataFiles,
                 'verbose':self.verbose, 'forceUpdate':self.forceUpdate, 'checkIntegrity':self.checkIntegrity}
 
-
-    def save(self, location=None, **add_args):
-        """
-        save the dataset as a pickle. can be loaded using the corresponding class using the class method :py:func:Dataset.load
-        :param str location: target path
-        :param dict add_args: additional keys to save with the dataset.
-        """
+    def get_save_dict(self, add_args):
         save_dict = {'data':self.data,
                      'metadata':self.metadata,
+                     'partitions':self.partitions,
                      'files':self.files,
                      'hash':self.hash,
                      'labels':self.labels,
                      'classes':self.classes,
                      'options_dict':self.get_options_dict(),
                      **add_args}
-        location = location or self.analysisDirectory + '/' + self['transformName'] + '/dataset_pickle.npz'
+        return save_dict
+
+    @classmethod
+    def load_save_dict(cls, loaded):
+        dataset = cls(loaded['dataset']['options_dict'])
+        dataset.data = loaded['dataset']['data']; dataset.metadata = loaded['dataset']['metadata']
+        dataset.files = loaded['dataset']['files']; dataset.hash = loaded['dataset']['hash']
+        dataset.labels = loaded['dataset']['labels']; dataset.classes = loaded['dataset']['classes']
+        dataset.partitions = loaded['dataset']['partitions']
+        return dataset
+   
+    def save(self, location=None, **add_args):
+        """
+        save the dataset as a pickle. can be loaded using the corresponding class using the class method :py:func:Dataset.load
+        :param str location: target path
+        :param dict add_args: additional keys to save with the dataset.
+        """
+        save_dict = self.get_save_dict(add_args) 
+        location = location or self.analysisDirectory + '/' + self.transformName + '/dataset_pickle.npz'
         location = os.path.splitext(location)[0] + '.vs'
         with open(location, 'wb') as f:
             dill.dump({'dataset':save_dict, **add_args}, f)
@@ -472,10 +487,7 @@ class Dataset(torch.utils.data.Dataset):
         location = os.path.splitext(location)[0] + '.vs'
         with open(location, 'rb') as f:
             loaded = dill.load(f)
-        dataset = cls(loaded['dataset']['options_dict'])
-        dataset.data = loaded['dataset']['data']; dataset.metadata = loaded['dataset']['metadata']
-        dataset.files = loaded['dataset']['files']; dataset.hash = loaded['dataset']['hash']
-        dataset.labels = loaded['dataset']['labels']; dataset.classes = loaded['dataset']['classes']
+        dataset = cls.load_save_dict(loaded)
         del loaded['dataset']
         return dataset, loaded
 
@@ -1089,6 +1101,7 @@ class Dataset(torch.utils.data.Dataset):
 
 
     def return_padded(self, *args, max_len=None):
+        #pdb.set_trace()
         if 0 in args:
             raise Exception('cannot pad dimension 0')
         if max_len is None:

@@ -281,6 +281,7 @@ class DeconvLayer(ConvLayer):
     pool_modules = {1:nn.MaxUnpool1d, 2:nn.MaxUnpool2d, 3:nn.MaxUnpool3d}
     conv_modules = {1: torch.nn.ConvTranspose1d, 2:torch.nn.ConvTranspose2d, 3:torch.nn.ConvTranspose3d}
     
+    @flatten_seq_method
     def forward(self, x, *args, indices=None, output_size=None, **kwargs):
         if not output_size is None:
             output_size = [int(o) for o in output_size]
@@ -1017,7 +1018,6 @@ class DeconvolutionalLatent(ConvolutionalLatent):
             indices = self.encoder.get_pooling_indices(dim)
         return indices
 
-    @flatten_seq_method
     def forward(self, x, *args, y=None, **kwargs):
         """
         forward function of the DeconvolutionalLatent module.
@@ -1032,7 +1032,6 @@ class DeconvolutionalLatent(ConvolutionalLatent):
         original_shape = None
         # if issubclass(type(x), list):
         #     x = torch.cat(x, dim=-1)
-
         pre_output = self.pre_mlp(x, y=y)
         pre_output = split_select(pre_output, self.transferred_size)
         outs = []

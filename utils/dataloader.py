@@ -29,6 +29,7 @@ def length(array):
 
 class DataLoader(object):
     is_sequence = False
+    num_workers = 0
     def __init__(self, dataset, batch_size, tasks=None, partition=None, ids=None, is_sequence=None,
                  pin_memory=False, num_workers=0, preprocessing=None, *args, **kwargs):
         self.dataset = dataset
@@ -47,10 +48,9 @@ class DataLoader(object):
         if is_sequence:
             self.is_sequence = is_sequence
 
-        loader_args = {'pin_memory':pin_memory}
-        if num_workers is not None:
-            loader_args['num_workers'] = num_workers
-
+        num_workers = kwargs.get('num_workers', 0) or self.num_workers 
+        loader_args = {'pin_memory':pin_memory, 'num_workers':num_workers or 0}
+  
         self.dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, drop_last=False, shuffle=True, **loader_args)
 
         # metadata to retrieve
@@ -86,10 +86,28 @@ class DataLoader(object):
 #                yield self.transform(self.dataset.data[self.random_ids[i]]), None
 
 
-class SequenceLoader(DataLoader):
-    def __init__(self, *args, **kwargs):
-        super(SequenceLoader, self).__init__(*args, **kwargs)
-        self.is_sequence = True
+def SequenceLoader(sequence_length=None, random_pos=False, num_workers=None):
+    class SequenceLoader(DataLoader):
+        def __init__(self, *args, **kwargs):
+            self.num_workers = num_workers 
+            super(SequenceLoader, self).__init__(*args, **kwargs)
+            self.is_sequence = True
+            self.sequence_length = sequence_length
+            self.random_pos = random_pos
+
+        def __iter__(self):
+            for x, y in self.dataloader:
+                if self.sequence_length:
+                    beg_idx = 0
+                    if self.random_pos:
+                        beg_idx = random.randrange(0, max(0, x.shape[1] - self.sequence_length))
+
+                    print(beg_idx)
+                    x = x[:, beg_idx:beg_idx+self.sequence_length]
+                yield x, y
+           
+    return SequenceLoader
+
 
 logger=GPULogger(verbose=False)
 def RawDataLoader(grain_length=None, grain_hop=None, sequence_length=0, resample=None, add_channel=False, window=False, **func_args):
@@ -103,28 +121,31 @@ def RawDataLoader(grain_length=None, grain_hop=None, sequence_length=0, resample
             self.grain_length= grain_length
             self.grain_hop = grain_hop or int(grain_length / 2)
             self.resampleFactor = resampleFactor
-            self.sequence_length = sequence_length
+            self.sequence_length = sequence_length or 0
             self.window = window
 
         def __iter__(self):
 
-            logger('start loaing')
+            logger('start loading')
             for x, y in self.dataloader:
                 logger('loaded')
+
                 if self.resampleFactor:
                     x = np.take(x, range(0, x.shape[-1], self.resampleFactor), axis=-1)
                 if self.grain_length is not None:
                     if self.sequence_length == 0:
-                        assert self.grain_length < x.shape[1], "grain length is greater than length of chunks"
+                        assert self.grain_length < x.shape[-1], "grain length is greater than length of chunks"
                         #TODO maybe more subtle slicing?
                         random_pos = random.randrange(x.shape[-1] - self.grain_length)
                         x = np.take(x, range(random_pos, random_pos+self.grain_length), axis=-1)
                     else:
+
                         full_length =  (self.sequence_length-1)*self.grain_hop  + self.grain_length
                         assert full_length < x.shape[1], \
                             "sequence length is greater than length of chunks (asked %d, is %d)"%(full_length, x.shape[1])
 
                         logger('start slicing')
+
                         max_idx = np.max(np.where((x==0).sum(0) == 0)[0])
                         random_pos = np.random.randint(0, max_idx - full_length, x.shape[0])
                         random_pos = np.stack([np.arange(r, r + full_length) for r in random_pos])
@@ -135,7 +156,9 @@ def RawDataLoader(grain_length=None, grain_hop=None, sequence_length=0, resample
                         #TODO take care of this fucking zero padding
                         # take sub-chunk
                         logger('masked selecet')
-                        x = torch.masked_select(x, torch.ByteTensor(mask, device=x.device)).reshape(x.shape[0], full_length)
+                        full_shape = x.shape
+                        x = torch.masked_select(x, torch.ByteTensor(mask, device=x.device))#.reshape(x.shape[0], full_length)
+
 
                         # split in grains
                         x = torch.cat([np.take(x, range(i*self.grain_hop,(i*self.grain_hop+self.grain_length)), -1).unsqueeze(1) for i in range(self.sequence_length)], dim=1)

@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.optim
 
 from ..modules.modules_hidden import  HiddenModule
-from ..utils.misc import GPULogger, denest_dict, apply, apply_method, apply_distribution, print_stats
+from ..utils.misc import GPULogger, denest_dict, apply, apply_method, apply_distribution, print_stats, flatten_seq_method
 from . import AbstractVAE 
 
 logger = GPULogger(verbose=False)
