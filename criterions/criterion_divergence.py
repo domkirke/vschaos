@@ -163,7 +163,7 @@ class RD(Criterion):
     def __repr__(self):
         return "RD"
 
-    def __init__(self, alpha=None, learnable_alpha=False, *args, **kwargs):
+    def __init__(self, alpha=2.0, learnable_alpha=False, *args, **kwargs):
         super(RD, self).__init__()
         assert alpha > 0
         self.alpha = torch.nn.Parameter(torch.tensor(alpha or 2.0), requires_grad=bool(learnable_alpha))
@@ -198,7 +198,7 @@ class JSD(Criterion):
     def __repr__(self):
         return "JSD"
 
-    def __init__(self, alpha=None, learnable_alpha=False, *args, **kwargs):
+    def __init__(self, alpha=0.5, learnable_alpha=False, *args, **kwargs):
         super(JSD, self).__init__()
         assert alpha > 0 and alpha < 1
         self.alpha = torch.nn.Parameter(torch.tensor(alpha or 2.0), requires_grad=bool(learnable_alpha))

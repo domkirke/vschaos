@@ -29,11 +29,11 @@ class MLPReinforcementModule(torch.nn.Module):
         hidden_dims = checklist(module_params.get('dim', []), n_layers)
         modules = []
         # retrieve input params
-        input_dim = in_params['dim']
+        input_dim = cumprod(checktuple(in_params['dim']))[-1]
         if latent_params is not None:
             lp = checklist(latent_params)[0]
             input_dim += sum([k['dim'] for k in checklist(lp)])
-        output_dim = in_params['dim']
+        output_dim = input_dim
 
         for i in range(n_layers):
             dim_in = input_dim if i==0 else hidden_dims[i]
@@ -46,21 +46,17 @@ class MLPReinforcementModule(torch.nn.Module):
 
     @flatten_seq_method
     def forward(self, input, z=None):
-        input_shape = input.shape
-        if len(input_shape) > 2:
-            input = input.view(input_shape[0], cumprod(input_shape[1:])[-1])
+        pdb.set_trace()
         if z is not None:
-            z_input = z[0]
-            if len(z_input.shape) > 2:
-                z_input = z_input.contiguous().view(z_input.shape[0]*z_input.shape[1], *z_input.shape[2:])
+            z_input = torch.cat(checklist(z), dim=-1)
             pdb.set_trace()
+            # if len(z_input.shape) > 2:
+            #     z_input = z_input.contiguous().view(z_input.shape[0]*z_input.shape[1], *z_input.shape[2:])
             input = torch.cat([input, z_input], dim=-1)
         for i, module in enumerate(self.layers):
             input = module(input)
             if len(self.layers) > 1 and i < len(self.layers) - 1:
                 input = torch.nn.functional.relu(input)
-        if input_shape != input.shape:
-            input = input.view(*input_shape)
         '''
         if self.nn_lin:
             input = getattr(torch.nn.functional, self.nn_lin)(input)
@@ -224,7 +220,7 @@ class LossReinforcement(Criterion):
         if detach:
             module_input = module_input.detach()
             if z:
-                z = [z_tmp.detach() for z_tmp in z]
+                z = [torch.cat(checklist(z_tmp), dim=-1).detach() for z_tmp in z]
         vae_out['x_reinforced'] = self.module(module_input, z=z)
         return vae_out
 

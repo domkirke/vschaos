@@ -321,16 +321,17 @@ class BernoulliLayer1D(nn.Module):
     '''Module that outputs parameters of a Bernoulli distribution.'''
     def __init__(self, pinput, poutput, **kwargs):
         super(BernoulliLayer1D , self).__init__()
-        self.input_dim = pinput['dim']; self.output_dim = poutput['dim']
-        self.modules_list = nn.Sequential(nn.Linear(self.input_dim, cumprod(checklist(poutput['dim']))[-1]), nn.Sigmoid())
+        self.pinput = pinput; self.poutput = poutput
+        input_dim = checklist(self.pinput['dim'])[-1]
+        output_dim = cumprod(checklist(poutput['dim']))[-1]
+        self.modules_list = nn.Sequential(nn.Linear(input_dim, output_dim), nn.Sigmoid())
         init_module(self.modules_list, 'Sigmoid')
         
     def forward(self, ins,  *args, **kwargs):
         mu = self.modules_list(ins)
-        if len(mu.shape) != len(checktuple(self.output_dim)) + 1:
+        if len(mu.shape) != len(checktuple(self.poutput['dim'])) + 1:
             mu = mu.view(mu.shape[0], *self.output_dim)
         return Bernoulli(probs=mu)
-
 
 class BernoulliLayer2D(nn.Module):
     def __init__(self, pinput, poutput, hidden_module=None, **kwargs):

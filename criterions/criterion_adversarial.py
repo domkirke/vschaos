@@ -87,7 +87,7 @@ class Adversarial(Criterion):
         loss_fake = torch.nn.functional.binary_cross_entropy(d_fake, torch.zeros(d_fake.shape, device=device), reduction="none")
 
         self.adv_loss = self.reduce((loss_real+loss_fake)/2)
-        return loss_gen, (loss_gen, self.adv_loss)
+        return loss_gen, (loss_gen.cpu().detach().numpy(), self.adv_loss.cpu().detach().numpy())
 
     def get_named_losses(self, losses):
         if issubclass(type(losses[0]), (tuple, list)):
