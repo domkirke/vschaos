@@ -275,7 +275,7 @@ class MLP(nn.Module):
         
         if not self.phidden.get('label_params') or y is None:
             return
-        ys = torch.cat([process(y[t], phidden['label_params'][t]) for t in y.keys()], dim=1)
+        ys = torch.cat([process(y[t], phidden['label_params'][t]) for t in phidden['label_params'].keys()], dim=1)
         return ys
 
 

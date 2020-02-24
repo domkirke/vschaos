@@ -403,8 +403,9 @@ class GatedDeconvLayer(DeconvLayer):
 
 #%% Convolution & Deconvolution containers
 
-def get_label_channel(x, y):
-    return y.reshape(*y.shape, *tuple((1,)*(len(x.shape)-2))).repeat(1, 1, *x.shape[2:]).float()
+def get_label_channel(x, y, device="cpu"):
+    return y.reshape(*y.shape, *tuple((1,)*(len(x.shape)-2))).repeat(1, 1, *x.shape[2:]).float().to(device)
+
 
 
 class Convolutional(nn.Module):
@@ -494,10 +495,10 @@ class Convolutional(nn.Module):
         if self.phidden.get('conditioning') == "concat":
             assert y is not None, "Convolutional module need following labels : %s"%list(self.phidden['label_params'].keys())
             for label in self.phidden['label_params'].keys():
-                current_y = y.get(label)
+                current_y = y.get(label); current_device = next(self.parameters()).device
                 if len(current_y.shape) == 1:
                     current_y = oneHot(current_y, self.phidden['label_params'][label]['dim'])
-                x = torch.cat((x, get_label_channel(x, current_y)), dim=1)
+                x = torch.cat((x, get_label_channel(x, current_y, device=current_device)), dim=1)
 
         # successively pass into convolutional modules
         out = x.clone()
@@ -612,10 +613,15 @@ class Deconvolutional(Convolutional):
         """
         if issubclass(type(x), list):
             x = torch.cat(x, )
-        if self.phidden.get('conditioning') == "concat":
-            assert y is not None, "Convolutional module need following labels : %s"%list(self.phidden['label_params'].keys())
-            for label in self.phidden['label_params']:
-                x = torch.cat((x, get_label_channel(x, y.get(label))), dim=1)
+        if self.phidden.get('label_params'):
+            if self.phidden.get('conditioning', 'concat') == 'concat':
+                assert y is not None, "Convolutional module need following labels : %s"%list(self.phidden['label_params'].keys())
+                current_device = next(self.parameters()).device
+                for label in self.phidden['label_params']:
+                    current_y = y[label]
+                    if len(current_y.shape) == 1:
+                        current_y = oneHot(current_y, self.phidden['label_params'][label]['dim'])
+                    x = torch.cat((x, get_label_channel(x, current_y, device=current_device)), dim=1)
         out = x.clone()
         # successively pass into convolutional modules
         for l in range(self.depth-1):
