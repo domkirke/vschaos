@@ -298,7 +298,7 @@ class Dataset(torch.utils.data.Dataset):
         tasks = checklist(tasks)
         for t in tasks:
             if t not in self.tasks:
-                raise Exception('the task %s is not present in the dataset'%t)
+                raise AttributeError('the task %s is not present in the dataset'%t)
         self.drop_tasks = list(tasks)
 
     def get_ids_from_files(self, files, translate=True):

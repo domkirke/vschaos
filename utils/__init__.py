@@ -30,6 +30,7 @@ __all__     = []
  
 # import sub modules
 from .onehot import oneHot, fromOneHot
+from .cage_deform import SerieDeformation
 from .misc import *
 from .utils_modules import *
 from .gather_distrib import *

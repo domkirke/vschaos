@@ -30,7 +30,6 @@ except:
 from numpy.random import permutation
 
 
-
 #######################################################################
 ##########      Transformations
 ###
@@ -216,7 +215,18 @@ class Manifold(object):
         self.anchors = {}
         self.ids = None
 
+
+    def __call__(self, z, **kwargs):
+        if torch.is_tensor(z):
+            z = z.detach().cpu().numpy()
+        if self.transformation is not None:
+            return self.transformation.transform(z)
+        else:
+            return z
+
     def invert(self, z):
+        if torch.is_tensor(z):
+            z = z.detach().cpu().numpy()
         if self.transformation:
             if self.transformation.invertible:
                 return self.transformation.inverse_transform(z)

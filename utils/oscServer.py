@@ -10,9 +10,11 @@ from librosa.output import write_wav
 from scipy import fft, ifft
 from scipy.signal import resample, resample_poly
 from time import  process_time
+from ..data import Dataset
 from ..data.signal.transforms import computeTransform, inverseTransform
 from ..vaes import AbstractVAE
-from . import checklist, checktuple
+from ..monitor import INVERTIBLE_DIMREDS
+from . import checklist, checktuple, SerieDeformation
 from ..monitor import visualize_dimred as dr
 import dill, random, string
 
@@ -20,7 +22,7 @@ from ..vaes import *
 
 SESSION_ID = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(10))
 SESSION_HISTORY_LENGTH = 10
-MAX_TRAJECTORY_LENGTH = 64
+MAX_TRAJECTORY_LENGTH = 65
 
 # phase reconstruction
 phase_rand = {}
@@ -201,6 +203,7 @@ class VAEServer(OSCServer):
            self.current_projection = None
            self.get_state()
            self.init_interpolation()
+           self.init_conditioning()
            if self._model:
                self._model.eval()
            self.print('Server ready')
@@ -220,7 +223,7 @@ class VAEServer(OSCServer):
         del self.model.manifolds[self.current_projection]
         self.current_projection = None
     def setprojection(self, *args):
-        if args[0] == "none":
+        if args[0] == "None":
             self.current_projection = None
         else:
             assert type(args[0]) == str and args[0] in self.model.manifolds.keys(), "projection %s not found"%args[0]
@@ -228,7 +231,6 @@ class VAEServer(OSCServer):
         self.print('projection set to %s'%self.current_projection)
         self.get_state()
     projection = property(getprojection, setprojection, delprojection)
-
 
     def getlayer(self): return self._current_layer
     def dellayer(self): raise Exception("attribute current_layer cannot be deleted")
@@ -239,6 +241,7 @@ class VAEServer(OSCServer):
             print('current_layer attribute must be parsed as int')
     current_layer = property(getlayer, setlayer, dellayer)
 
+
     def __init__(self, *args, **kwargs):
         self._model = None
         self.model = kwargs.get('model')
@@ -246,11 +249,14 @@ class VAEServer(OSCServer):
         self.projections = {}
         self.current_projection = None
         self.current_gen_id = 0
+        self.deformer = SerieDeformation()
+        self.cd_deformer = {}
 
         self.condition_params = None
         self.current_phase = None
         self.phase_reconstruction = None
 
+        self._dataset = None
         self.dataset = kwargs.get('dataset')
         self.transformOptions = kwargs.get('transformOptions')
         self.preprocessing = kwargs.get('preprocessing')
@@ -269,6 +275,7 @@ class VAEServer(OSCServer):
         super(VAEServer, self).__init__(*args)
         self.get_state()
         self.print('Server ready.')
+        self.send('/reduction_types', [str(d.__name__) for d in INVERTIBLE_DIMREDS])
 
     def init_bindings(self, osc_attributes=[]):
         super(VAEServer, self).init_bindings(self.osc_attributes)
@@ -300,6 +307,7 @@ class VAEServer(OSCServer):
 
         self.dispatcher.map('/encode_spectrogram', osc_parse(self.encode_spectrogram))
         self.dispatcher.map('/decode_spectrogram', osc_parse(self.decode_spectrogram))
+        self.dispatcher.map('/get_state', osc_parse(self.get_state))
 
         self.dispatcher.map('/get_spectrogram', osc_parse(self.get_spectrogram))
         self.dispatcher.map('/add_projection', osc_parse(self.add_projection))
@@ -314,6 +322,18 @@ class VAEServer(OSCServer):
     def resend_state(self):
         self.get_state()
         self.print('Server is ready.')
+
+    def init_conditioning(self):
+        _, labels = self.get_condition_list()
+        for k, v in labels.items():
+            self.cd_deformer[k] = SerieDeformation()
+            if self.dataset:
+                try:
+                    self.dataset.drop_task(k)
+                except AttributeError:
+                    self.print('dataset does not seem to have metadata %s'%(k))
+
+
 
     def get_condition_list(self):
         if self.model is None:
@@ -368,6 +388,7 @@ class VAEServer(OSCServer):
         self.send('/latent_dims', latent_dim)
         self.send('/num_layers', n_layers)
         self.send('/interpolation_list', list(self.interpolate_points.keys()))
+        # self.get_projections()
         return state
 
 
@@ -401,6 +422,7 @@ class VAEServer(OSCServer):
                             y[k] = torch.from_numpy(resample(np.array(self.current_conditioning[k]), transform.shape[0]))
                         else:
                             y[k] = torch.from_numpy(self.current_conditioning[k].repeat(transform.shape[0]))
+                        # y[k] = self.cd_deformer[k].add_original(self.current_conditioning[k], MAX_TRAJECTORY_LENGTH)
                     else:
                         y[k] = torch.zeros(transform.shape[0]).int()
             #
@@ -408,7 +430,10 @@ class VAEServer(OSCServer):
             self.print('Forwarding...')
             with torch.no_grad():
                 vae_out = self.model.encode(self.model.format_input_data(transform), y=y)
-            latent = vae_out[self.current_layer]['out_params'].mean.cpu()
+            latent = vae_out[self.current_layer]['out_params'].mean.cpu().numpy()
+
+            if self.projection is not None:
+                latent = self.projection(latent)
 
             if (len(latent.shape) == 1):
                 self.send('/encode', ['point', latent])
@@ -426,14 +451,14 @@ class VAEServer(OSCServer):
                 #         self.send_bach_series('/condition', k, resamp_v)
                 #         self._model.cond_vals[k] = v
 
-                if latent.shape[0] > MAX_TRAJECTORY_LENGTH:
-                    latent = self.get_deformed_serie(latent, target_length=MAX_TRAJECTORY_LENGTH, axis=0)
-
-                latent = latent.numpy().T
+                latent = latent.T
+                target_dim = int(2**np.ceil(np.log2(latent.shape[1])))
+                latent = np.pad(latent, ((0, 0), (0, target_dim - latent.shape[1])), mode="constant")
+                latent_rs = self.deformer.add_original(latent, 65)
                 for s in range(latent.shape[0]):
-                    self.send_bach_series('/encode', s, latent[s])
+                    self.send_bach_series('/encode', s, latent_rs[s])
             self.current_traj = latent
-            self.send('/latent', latent.squeeze().tolist())
+            # self.send('/latent', latent.squeeze().tolist())
             self.print('Server ready')
         except Exception as e:
             self.print('Encoding failed.')
@@ -447,7 +472,7 @@ class VAEServer(OSCServer):
         if args[0] == "series":
             input_args = args[1].split(' ')
             dim_id = int(input_args[0]) - 1;  dim_traj = np.array([float(a) for a in input_args[1:]])
-            self.current_traj[dim_id] = resample(dim_traj, self.current_traj.shape[1])
+            self.current_traj = self.deformer.deform(dim_id, dim_traj)
 
         if args[0] == "point":
             latent_dim = self.model.platent[self.current_layer]['dim']
@@ -471,8 +496,13 @@ class VAEServer(OSCServer):
                             y[k] = torch.zeros(self.current_traj.shape[1]).int()
 
                 self.print('Decoding...')
+
+                z = self.current_traj
+                if self.projection is not None:
+                    z = self.projection.invert(z)
+
                 with torch.no_grad():
-                    vae_out = self.model.decode(self.model.format_input_data(self.current_traj.T), y=y)
+                    vae_out = self.model.decode(self.model.format_input_data(z), y=y)
                 reco = vae_out[self.current_layer]['out_params'].mean.cpu().numpy().T
 
                 self.print('Preprocessing...')
@@ -651,15 +681,19 @@ class VAEServer(OSCServer):
         #self.send('/spectrogram_phase_out', phase_out)
 
 
-    def add_projection(self, proj_name, dimred, **kwargs):
+    def add_projection(self, proj_name, dimred, save=True, **kwargs):
 
+        proj_name = str(proj_name); dimred = int(dimred)
         if self._model is None:
             self.print('Please load a model first!')
+
+        if self.dataset is None:
+            self.print('Online dimensionality reduction methods require a -d option')
 
         if proj_name == "none":
             self.print('projection cannot be named none')
 
-        dimred_method = getattr(dr, dimred)
+        dimred_method = getattr(dr, proj_name)
         if dimred_method is None:
             self.print('projection %s not found'%dimred_method)
         self.print('computing projection %s...'%proj_name)
@@ -669,10 +703,15 @@ class VAEServer(OSCServer):
 
         self.print('projection %s created'%(proj_name))
         self.get_state()
+        self.get_projections()
+        self.print('server ready!')
 
 
     def get_projections(self):
-        self.send('/projections', list(self.model.manifolds.keys()))
+        if self._model is not None:
+            projections = list(self.model.manifolds.keys())
+            projections_str = [str(p) for p in projections]
+            self.send('/projections', projections_str)
 
     def save(self, path):
         if self._model is None:
