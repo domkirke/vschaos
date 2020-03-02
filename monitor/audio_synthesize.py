@@ -145,7 +145,7 @@ def get_transform_from_files(files, transform, transformOptions, window=None, ta
 
 # HIGH-LEVEL SYNTHESIS METHODS
 
-def resynthesize_files(dataset, model, transformOptions=None, transform=None, preprocessing=None, out='./',
+def resynthesize_files(dataset, model, transformOptions=None, transform=None, metadata=None, preprocessing=None, out='./',
                        sample=False, iterations=50, export_original=True, method="griffin-lim", window=None,
                        overlap=None, norm=True, sequence=False, sequence_overlap=False, n_files=10, files=None,
                        predict=False, epoch=None, **kwargs):
@@ -194,8 +194,12 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, pr
 
         # forward
         t = time.process_time()
+        y = {}
+        if metadata is not None:
+            for k in metadata.keys():
+                y[k] = np.ones(current_transform.shape[0]) * metadata[k][i]
         with torch.no_grad():
-            vae_out = model.forward(current_transform, **kwargs)
+            vae_out = model.forward(current_transform, y=y, **kwargs)
         transform_out = vae_out['x_params'].sample() if sample else vae_out['x_params'].mean
 
         # invert & export

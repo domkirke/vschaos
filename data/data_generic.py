@@ -260,7 +260,7 @@ class Dataset(torch.utils.data.Dataset):
                 data = np.concatenate(data, axis=0)
             else:
                 data = self._get_padded_data(data, self.padded_dims, self.padded_lengths)
-        metadata = []
+        metadata = {}
         # Get corresponding metadata
         if self.drop_tasks:
             metadata = {t:self.metadata[t][item] for t in self.drop_tasks}
@@ -655,6 +655,7 @@ class Dataset(torch.utils.data.Dataset):
             classes_raw = [tuple(c.split('\t')) for c in classes_raw]
             classes_raw = list(filter(lambda x: len(x)==2, classes_raw))
             self.classes[task] = {v:type_metadata(k) for k,v in classes_raw}
+            self.classes[task]['_length'] = len(classes_raw)
         else:
             if classList is not None:
                 self.classes[task] = classList;
@@ -1120,16 +1121,10 @@ class Dataset(torch.utils.data.Dataset):
         :param shuffle: randomize audio files (default: True)
         """
 
-        assert n_files < len(self.files), "number of amputated files greater than actual number of files!"
-        if shuffle:
-            ids = np.random.permutation(len(self.files))[:n_files]
-        else:
-            ids = np.arange(n_files)
-        self.files = [self.files[i] for i in ids]
-        self.hash = {self.files[i]:i for i in range(len(self.files))}
-        for k, v in self.partitions.items():
-            if type(v[0]) == str:
-                self.partitions[k] = list(filter(lambda x: x in self.files, v))
+        files_set = set(self.files)
+        assert n_files < len(files_set), "number of amputated files greater than actual number of files!"
+        selected_files = np.random.choice(np.array(list(files_set)), n_files, replace=False)
+        return self.filter_files(selected_files)
 
 
     def translate_files(self, files):
