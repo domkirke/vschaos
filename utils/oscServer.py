@@ -458,7 +458,8 @@ class VAEServer(OSCServer):
                 for s in range(latent.shape[0]):
                     self.send_bach_series('/encode', s, latent_rs[s])
             self.current_traj = latent
-            # self.send('/latent', latent.squeeze().tolist())
+            if latent.shape[0] < MAX_TRAJECTORY_LENGTH:
+                self.send('/latent', latent.squeeze().tolist())
             self.print('Server ready')
         except Exception as e:
             self.print('Encoding failed.')
@@ -476,11 +477,11 @@ class VAEServer(OSCServer):
 
         if args[0] == "point":
             latent_dim = self.model.platent[self.current_layer]['dim']
-            self.current_traj = np.zeros((latent_dim,1))
+            self.current_traj = np.zeros((1, latent_dim))
             if len(args)-1 >= latent_dim:
-                self.current_traj[:, 0] = np.array(args[1:latent_dim+1])
+                self.current_traj[0] = np.array(args[1:latent_dim+1])
             else:
-                self.current_traj[:len(args), 0] = np.array(args[1:])
+                self.current_traj[0, :len(args)] = np.array(args[1:])
 
         if args[0] in ["generate", "point"]:
             try:
