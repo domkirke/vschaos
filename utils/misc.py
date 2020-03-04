@@ -2,6 +2,7 @@
 
 import torch, numpy as np, os, pdb, copy as copy_module, random
 from time import time
+from .onehot import oneHot
 from .. import distributions as dist
 import functools
 
@@ -544,5 +545,37 @@ def choices(l, k=1):
             return l[np.random.permutation(len(l))[:k]]
         else:
             raise TypeError('list of type %s is not recognized for function choices'%type(l))
+
+
+# CONDITIONING UTILITARY METHODSZ
+
+def get_conditioning_params(model):
+    if model is None:
+        return "None"
+    hidden_params = []
+    for ph in checklist(model.phidden):
+        if ph.get('encoder') or ph.get('decoder'):
+            if ph.get('encoder'):
+                hidden_params.append(ph['encoder'])
+            if ph.get('decoder'):
+                hidden_params.append(ph['decoder'])
+        else:
+            hidden_params.extend(ph)
+
+    labels = {}
+    for ph in hidden_params:
+        if ph.get('label_params') is not None:
+            labels = {**labels, **ph['label_params']}
+    return labels
+
+
+def generate_conditioning_mesh(label_params):
+    ys = {}
+    for k, v in label_params:
+        if issubclass(v['dist'], dist.Categorical):
+            ys[k] = oneHot(range(v['dim']), v['dim'])
+
+    return ys
+
 
 

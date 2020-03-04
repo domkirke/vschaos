@@ -395,6 +395,7 @@ class Dataset(torch.utils.data.Dataset):
                 if len(i) == 0:
                     continue
                 if type(i[0]) in [str, np.str_]:
+                    i = self.translate_files(i)
                     newDataset.partitions[name] = list(filter(lambda x: x in newDataset.files, i))
                 else:
                     valid_ids = np.intersect1d(i, idx)
@@ -1114,18 +1115,16 @@ class Dataset(torch.utils.data.Dataset):
 
 
 
-    def remove_files(self, n_files, shuffle=True):
+    def remove_files(self, n_files):
         """
         just keep a given number of files and drop the rest
         :param n_files: number of kept audio files
         :param shuffle: randomize audio files (default: True)
         """
-
         files_set = set(self.files)
         assert n_files < len(files_set), "number of amputated files greater than actual number of files!"
         selected_files = np.random.choice(np.array(list(files_set)), n_files, replace=False)
         return self.filter_files(selected_files)
-
 
     def translate_files(self, files):
         """
@@ -1141,7 +1140,6 @@ class Dataset(torch.utils.data.Dataset):
         translated_files = list({re.sub(oldRoot, self.dataPrefix, k) for k in files})
         translated_files = list(filter(lambda x: x in self.hash.keys(), translated_files))
         return translated_files
-
 
     def filter_files(self, files):
         """

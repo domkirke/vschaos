@@ -787,8 +787,10 @@ def plot_latent_dim(dataset, model, label=None, tasks=None, n_points=None, layer
     full_ids = CollapsedIds()
     if n_points is not None:
         dataset = dataset.retrieve(np.random.permutation(len(dataset.data))[:n_points])
+
     if tasks == [None]:
         full_ids.add(None, ids if ids is not None else np.random.permutation(len(dataset.data))[:n_points])
+        class_ids = {None:None}; nclasses = {None:[]}
     else:
         # if n_points is not None:
         #    ids = np.random.permutation(len(dataset.data))[:n_points]
@@ -848,11 +850,12 @@ def plot_latent_dim(dataset, model, label=None, tasks=None, n_points=None, layer
             for task in tasks:
                 if task:
                     meta = np.array(dataset.metadata[task])[full_ids.ids[task]]
+                    class_names = {v: k for k, v in dataset.classes[task].items()}
                 else:
-                    meta = [None];
-                    class_ids = {None: None};
-                class_names = {v: k for k, v in dataset.classes[task].items()}
-                fig, ax = core.plot_dims(full_z_t[full_ids.get_ids(task)], meta=meta, classes=nclasses[task], class_ids=class_ids, class_names=class_names, legend=legend, var=full_var)
+                    meta = {}
+                    class_ids = {None: None}; class_names = None
+                fig, ax = core.plot_dims(full_z_t[full_ids.get_ids(task)], meta=meta, classes=nclasses[task],
+                                         class_ids=class_ids, class_names=class_names, legend=legend, var=full_var[full_ids.get_ids(task)])
 
                 # register and export
                 fig_name = 'layer %d / task %s' % (layer, task) if task else 'layer%d' % layer
@@ -869,6 +872,7 @@ def plot_latent_dim(dataset, model, label=None, tasks=None, n_points=None, layer
 def plot_latent_consistency(dataset, model, label=None, tasks=None, n_points=None, layers=None, legend=True, out=None, ids=None, transformation=None, name=None,
                     preprocess=True, loader=None, batch_size=None, partition=None, preprocessing=None, sample=False, *args, **kwargs):
 
+    assert len(model.platent) > 1, "plot_latent_consistency is only made for hierarchical models"
     # get plotting ids
     if partition is not None:
         dataset = dataset.retrieve(partition)
@@ -945,6 +949,7 @@ def plot_latent_stats(dataset, model, label=None, tasks=None, n_points=None, lay
 
     ### prepare data IDs
     ids = None # points ids in database
+    layers = layers or range(len(model.platent))
     tasks = checklist(tasks)
     if len(tasks) == 0:
         tasks = None
@@ -1339,6 +1344,8 @@ def plot_losses(*args, loss=None, out=None, separated=False, axis="time", **kwar
             [fig[i].savefig(out+'/losses/%s_%s.pdf'%(name, loss_names[i]), format='pdf') for i in range(len(fig))]
         else:
             fig.savefig(out+'/losses/%s.pdf'%name, format='pdf')
+
+    fig = checklist(fig)
 
     return fig, ax
 

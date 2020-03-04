@@ -71,14 +71,17 @@ class SimpleTrainer(Trainer):
         # plot args
         plot_tasks = kwargs.get('plot_tasks', tasks)
         self.plots = kwargs.get('plots', {})
+        self.synth = kwargs.get('synth', {})
         # init monitors
-        self.init_monitors(models, datasets, losses, self.tasks, plots=self.plots, plot_tasks=plot_tasks)
+        use_tensorboard = kwargs.get('use_tensorboard')
+        total_losses = checklist(losses) + [self.reinforcers] if self.reinforcers is not None else checklist(losses)
+        self.init_monitors(models, datasets, total_losses, self.tasks, plots=self.plots, synth=self.synth, plot_tasks=plot_tasks, use_tensorboard=use_tensorboard)
         self.best_model = None
         self.best_test_loss = np.inf
         self.logger = GPULogger(kwargs.get('export_profile',None), kwargs.get('verbose', False))
 
-    def init_monitors(self, models, datasets, losses, tasks, plots=None, plot_tasks=None, use_tensorboardx=False):
-        self.monitor = Monitor(models, datasets, losses, tasks, plots=plots, tasks = plot_tasks, use_tensorboardx=use_tensorboardx)
+    def init_monitors(self, models, datasets, losses, tasks, plots=None, synth=None, plot_tasks=None, use_tensorboard=None):
+        self.monitor = Monitor(models, datasets, losses, tasks, plots=plots, synth=synth, tasks = plot_tasks, use_tensorboard=use_tensorboard)
 
     def init_time(self):
         self.start_time = process_time()
@@ -105,9 +108,11 @@ class SimpleTrainer(Trainer):
         # write losses in loss objects
         if self.trace_mode == "epoch" and write:
             if issubclass(type(self.losses), (list, tuple)):
-                [apply_method(self.losses[i], 'write', 'train', full_losses[i], time=self.get_time()) for i in range(len(self.losses))]
+                [apply_method(self.losses[i], 'write', 'train', full_losses['main_losses'][i], time=self.get_time()) for i in range(len(self.losses))]
             else:
-                apply_method(self.losses, 'write', 'train', full_losses, time=self.get_time())
+                apply_method(self.losses, 'write', 'train', full_losses['main_losses'], time=self.get_time())
+            if self.reinforcers:
+                self.reinforcers.write('train', full_losses['reinforcement_losses'], time=self.get_time())
             self.monitor.update(kwargs.get('epoch'))
         return full_loss, full_losses
 
@@ -123,9 +128,12 @@ class SimpleTrainer(Trainer):
         # write losses in loss objects
         if write:
             if issubclass(type(self.losses), (list, tuple)):
-                [apply_method(self.losses[i], 'write', 'test', full_losses[i], time=self.get_time()) for i in range(len(self.losses))]
+                [apply_method(self.losses[i], 'write', 'test', full_losses['main_losses'][i], time=self.get_time()) for i in range(len(self.losses))]
             else:
-                apply_method(self.losses, 'write', 'test', full_losses, time=self.get_time())
+                apply_method(self.losses, 'write', 'test', full_losses['main_losses'], time=self.get_time())
+            self.monitor.update(kwargs.get('epoch'))
+            if self.reinforcers:
+                self.reinforcers.write('test', full_losses['reinforcement_losses'], time=self.get_time())
             self.monitor.update(kwargs.get('epoch'))
         # check if current model is the best model
         if full_loss < self.best_test_loss:
@@ -192,16 +200,8 @@ class SimpleTrainer(Trainer):
         if epoch is not None:
             apply_method(self.monitor, 'update', epoch)
         plt.close('all')
-        apply_method(self.monitor, 'plot', out=figures_folder, epoch=epoch, n_points=kwargs.get('plot_npoints'),
-                          loader=self.dataloader_class,
-                          preprocessing=self.preprocessing, trainer=self,
-                          image_export=kwargs.get('image_export', False),
-                          plot_reconstructions=kwargs.get('plot_reconstructions', False),
-                          plot_latent=kwargs.get('plot_latentspace', False),
-                          plot_statistics=kwargs.get('statistics', False), 
-                          plot_partition=kwargs.get('plot_partition'),
-                          sample=kwargs.get('sample', False))
-
+        apply_method(self.monitor, 'plot', out=figures_folder, epoch=epoch, loader=self.dataloader_class, trainer=self)
+        apply_method(self.monitor, 'synthesize', out=figures_folder, epoch=epoch, loader=self.dataloader_class, trainer=self)
 
 def train_model(trainer,  options={}, save_with={}, **kwargs):
     epochs = options.get('epochs', 3000) # number of epochs

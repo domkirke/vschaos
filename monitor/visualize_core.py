@@ -10,7 +10,7 @@ from functools import reduce
 import matplotlib.pyplot as plt
 import itertools
 from ..utils.onehot import oneHot, fromOneHot
-from ..utils.misc import CollapsedIds
+from ..utils.misc import CollapsedIds, checklist
 from sklearn.metrics import confusion_matrix
 import matplotlib.patches as mpatches
 from matplotlib.ticker import FormatStrFormatter
@@ -391,10 +391,10 @@ def plot_dims(current_z, meta=None, var=None, classes=None, class_ids=None, clas
     if meta is None:
         meta = np.zeros((current_z.shape[0]))
         cmap = get_cmap(0, color_map=cmap)
-        cmap_hash = {0:0}
+        cmap_hash = {None:None}
     else:
-        cmap = get_cmap(len(classes), color_map=cmap)
-        cmap_hash = {classes[i]:i for i in range(len(classes))}
+        cmap = get_cmap(len(checklist(classes)), color_map=cmap)
+        cmap_hash = {classes[i]:i for i in range(len(checklist(classes)))}
 
     # flatten if sequence
     if len(current_z.shape) == 3:

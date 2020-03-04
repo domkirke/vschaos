@@ -193,7 +193,6 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, me
         #     current_transform = window_signal(current_transform, sequence, sequence_overlap, axis=0)
 
         # forward
-        t = time.process_time()
         y = {}
         if metadata is not None:
             for k in metadata.keys():
@@ -235,9 +234,11 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, me
                                                      originalPhase=originalPhase,iterations=iterations, method=method)
             write_wav(original_out, current_transform, transformOptions.get('resampleTo', 22050), norm=norm)
 
-        del path_out; del signal_out; del current_transform
+        del path_out; del signal_out;
         gc.collect(); gc.collect();
         torch.cuda.empty_cache()
+
+        return current_transform, transformOptions.get('resampleTo', 22050)
 
     return None, []
 

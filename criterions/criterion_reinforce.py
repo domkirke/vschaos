@@ -46,10 +46,8 @@ class MLPReinforcementModule(torch.nn.Module):
 
     @flatten_seq_method
     def forward(self, input, z=None):
-        pdb.set_trace()
         if z is not None:
             z_input = torch.cat(checklist(z), dim=-1)
-            pdb.set_trace()
             # if len(z_input.shape) > 2:
             #     z_input = z_input.contiguous().view(z_input.shape[0]*z_input.shape[1], *z_input.shape[2:])
             input = torch.cat([input, z_input], dim=-1)
@@ -66,9 +64,9 @@ class MLPReinforcementModule(torch.nn.Module):
 
 class ResidualMLPReinforcementModule(MLPReinforcementModule):
     init_value = 1e-5
-    def __init__(self, in_params, module_params):
+    def __init__(self, in_params, module_params, latent_params=None):
         module_params['nn_lin'] = None
-        super(ResidualMLPReinforcementModule, self).__init__(in_params, module_params)
+        super(ResidualMLPReinforcementModule, self).__init__(in_params, module_params, latent_params=latent_params)
         '''
         for i in range(len(self._modules)):
             self.layers[i].weight.data = self.layers[i].weight.data * self.init_value
@@ -160,9 +158,9 @@ class ConvReinforcementModule(torch.nn.Module):
 
 class ResidualConvReinforcementModule(ConvReinforcementModule):
     init_value = 1e-3
-    def __init__(self, in_params, module_params):
+    def __init__(self, in_params, module_params, latent_params=None):
         module_params['nn_lin'] = None
-        super(ResidualConvReinforcementModule, self).__init__(in_params, module_params)
+        super(ResidualConvReinforcementModule, self).__init__(in_params, module_params, latent_params=latent_params)
         '''
         for i in range(len(self.layers)):
             self.layers[i].weight.data = self.layers[i].weight.data * self.init_value

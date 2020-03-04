@@ -51,7 +51,12 @@ torch.manual_seed(0)
 
 # overriding DataParallel to allow distribution parallelization
 # tests for sub-commit
-
+try:
+    from matplotlib import pyplot as plt
+except:
+    import matplotlib
+    matplotlib.use('agg')
+    from matplotlib import pyplot as plt
 
 class DataParallel(torch.nn.DataParallel):
     def gather(self, *args, **kwargs):

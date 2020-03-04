@@ -2,7 +2,7 @@ import torch, numpy as np, librosa, matplotlib.pyplot as plt
 from .visualize_dimred import PCA, ICA
 from ..utils.misc import check_dir, print_stats
 from .visualize_core import CollapsedIds
-from ..utils import decudify, merge_dicts
+from ..utils import decudify, merge_dicts, checklist
 from ..utils.dataloader import DataLoader
 import matplotlib.gridspec as gridspec
 reduction_hash = {'pca':PCA, 'ica':ICA}
@@ -24,6 +24,7 @@ descriptors = ['loudness', 'centroid', 'bandwidth', 'flatness', 'rolloff']
 zsh = None
 
 def sampleBatchCompute(model, zs, pca, cond, targetDims=None, preprocessing=None, layer=-1):
+    print(pca,type(pca))
     if (targetDims is not None):
         zs = zs[targetDims]
     else:
@@ -52,11 +53,21 @@ def sampleBatchCompute(model, zs, pca, cond, targetDims=None, preprocessing=None
         descValues['rolloff'][i] = librosa.feature.spectral_rolloff(S=currentFrame)[0][0]
     return descValues
 
-def plot2Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=10, nb_planes=5, bounds=[-5,5], sample_layer=0,
-                  resultTensor=None, preprocessing=None, n_points=None, batch_size=None, loader=None, preprocess=False, out=None, **kwargs):
+def plot2Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=10, layers=None, nb_planes=5, bounds=[-5,5],
+                      sample_layer=0, preprocessing=None, n_points=None, batch_size=None, loader=None, preprocess=False,
+                      out=None,  **kwargs):
 
     vae_out = None
+    layers = None or range(len(vae.platent))
     need_forward = len(list(filter(lambda x: type(x) == type, projections))) != 0
+
+
+    if issubclass(type(projections[0]), list):
+        for proj in projections:
+            plot2Ddescriptors(dataset, vae, projections=proj, label=label, nb_samples=nb_samples, nb_planes=nb_planes,
+                              bounds=bounds, sample_layer=sample_layer, preprocessing=preprocessing, n_points=n_points,
+                              batch_size=batch_size, loader=loader, preprocess=preprocess, out=out ,**kwargs)
+
     if need_forward:
         ### prepare data IDs
         ids = None # points ids in database
@@ -83,7 +94,9 @@ def plot2Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=10, n
         check_dir(out)
 
     figs = []; axes = []
-    for reduction in projections:
+    projections = checklist(projections)
+    for layer in layers:
+        reduction = projections[layer]
         if type(reduction) == type:
             reduction = reduction_hash[reduction](n_components=3)
             reduction.fit(vae_out[-1])
@@ -126,7 +139,7 @@ def plot2Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=10, n
                         points[x*nb_samples + y] = np.array(curPoint)
 
                 print(points.max(), points.min())
-                descVals = sampleBatchCompute(vae, points, reduction, label, layer=sample_layer)
+                descVals = sampleBatchCompute(vae, points, reduction, label, cond=label, layer=sample_layer)
                 for x in range(nb_samples):
                     for y in range(nb_samples):
                         for d in descriptors:
@@ -180,13 +193,23 @@ def getDescriptorGrid(sampleGrid3D, vae, pca, cond, preprocessing=None):
 
     return resultTensor
 
-def plot3Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=5, nb_planes=3, bounds=[-5,5], figName=None, loadFrom=None, saveAs=None,
-                  resultTensor=None, preprocessing=None, n_points=None, batch_size=None, loader=None, preprocess=False, out=None, **kwargs):
+def plot3Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=15, nb_planes=10, layers=None, bounds=[-5,5],
+                      figName=None, loadFrom=None, saveAs=None, resultTensor=None, preprocessing=None, n_points=None,
+                      batch_size=None, loader=None, preprocess=False, out=None, **kwargs):
 
     ### prepare data IDs
     # if some projections are just classes, compute them
     vae_out = None
+    layers = layers or range(len(vae.platent))
+    fig = plt.figure(figsize=(12, 6))
     need_forward = len(list(filter(lambda x: type(x) == type, projections))) != 0
+
+    if issubclass(type(projections[0]), list):
+        for proj in projections:
+            plot3Ddescriptors(dataset, vae, projections=proj, label=label, nb_samples=nb_samples, nb_planes=nb_planes,
+                              bounds=bounds,  preprocessing=preprocessing, n_points=n_points,
+                              batch_size=batch_size, loader=loader, preprocess=preprocess, out=out ,**kwargs)
+
     if need_forward:
         ids = None # points ids in database
         full_ids = CollapsedIds()
@@ -217,7 +240,8 @@ def plot3Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=5, nb
         out=  out+'/descriptor_3d/'
         check_dir(out)
 
-    for reduction in projections:
+    for layer in layers:
+        reduction = projections[layer]
         if type(reduction) == type:
             reduction = reduction_hash[reduction](n_components=3)
             reduction.fit(vae_out[-1])
@@ -253,9 +277,7 @@ def plot3Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=5, nb
                 print('descriptos %s...' % d)
                 global i;
                 i = 0;
-                fig = plt.figure(figsize=(12, 6))
                 gs = gridspec.GridSpec(1, 2, width_ratios=[1, 1])
-                ax = fig.add_subplot(gs[0], projection='3d')
                 ax = fig.add_subplot(gs[0], projection='3d')
                 plt.title('Projection ' + axNames[dim] + ' - Spectral ' + d)
                 if (dim == 0):
@@ -340,7 +362,7 @@ def plot3Ddescriptors(dataset, vae, projections=[], label=None, nb_samples=5, nb
                 Writer = animation.writers['ffmpeg']
                 writer = Writer(fps=15, metadata=dict(artist='acids.ircam.fr'), bitrate=1800)
                 ani = animation.FuncAnimation(fig, updatefig, frames=nb_samples, interval=50, blit=True)
-                ani.save(out +'_' + reduction + '_' + d + '_' + axNames[dim] + '.mp4', writer=writer)
+                ani.save(out +'_' + type(reduction).__name__ + '_' + d + '_' + axNames[dim] + '.mp4', writer=writer)
                 ani.event_source.stop()
                 del ani
                 plt.close()

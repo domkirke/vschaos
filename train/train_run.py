@@ -17,6 +17,9 @@ def run(self, loader, preprocessing=None, epoch=None, optimize=True, schedule=Fa
     if preprocessing is None:
         preprocessing = self.preprocessing
     self.logger('start epoch')
+    train_losses = {'main_losses':[]}
+    if self.reinforcers:
+        train_losses['reinforcement_losses'] = []
     for x,y in loader:
         # forward
         #pdb.set_trace()
@@ -36,7 +39,7 @@ def run(self, loader, preprocessing=None, epoch=None, optimize=True, schedule=Fa
             self.logger('data forwarded')
             #pdb.set_trace()
             batch_loss, losses = self.losses.loss(model=self.models, out=out, target=x, epoch=epoch, plot=plot and not batch, period=period)
-            train_losses.append(losses)
+            train_losses['main_losses'].append(losses)
         except NaNError:
             pdb.set_trace()
         #except Exception as e:
@@ -58,6 +61,7 @@ def run(self, loader, preprocessing=None, epoch=None, optimize=True, schedule=Fa
 
         if self.reinforcers:
             _, reinforcement_losses = self.reinforcers(out, target=x, epoch=epoch, optimize=optimize)
+            train_losses['reinforcement_losses'].append(reinforcement_losses)
 
             self.logger('optimization done')
         # update loop
@@ -78,7 +82,8 @@ def run(self, loader, preprocessing=None, epoch=None, optimize=True, schedule=Fa
         del out; del x
 
     current_loss /= batch
-    train_losses = recursive_add(train_losses, factor = 1/len(train_losses))
+    for k in train_losses.keys():
+        train_losses[k] = recursive_add(train_losses[k], factor = 1/len(train_losses[k]))
     # scheduling the training
     if schedule:
         apply_method(self.models, "schedule", current_loss)
