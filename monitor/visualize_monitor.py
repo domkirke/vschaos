@@ -109,7 +109,6 @@ class Monitor(object):
         if not self.use_tensorboard:
             return
         images = []
-        print(name, image_list)
         for i, fig in enumerate(image_list):
             cv = FigureCanvas(fig)
             cv.draw()

@@ -292,6 +292,7 @@ class AdversarialReinforcement(LossReinforcement):
         self.adv_loss = Adversarial(pinput, adversarial_params, poptim)
 
     def get_reinforced_error(self, x_resyn, x_original):
+        x_original = x_original.to(x_resyn.device)
         loss, losses = self.adv_loss(x_resyn, x_original)
         return loss
 

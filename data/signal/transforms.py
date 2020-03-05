@@ -295,7 +295,7 @@ def transformHandler(sig, currentType, direction, options):
             sig = np.transpose(sig)
             if sig.shape[1] == 1:
                 sig = sig.repeat(2, -1)
-            currentTransform = librosa.istft(sig, hop_length=hopSize, win_length=winSize)
+            currentTransform = librosa.istft(sig.squeeze(), hop_length=hopSize, win_length=winSize)
         elif (currentType == 'mel'):
             print('[Warning] Mel inversion not implemented yet.')
             currentTransform = np.zeros((1, 1));

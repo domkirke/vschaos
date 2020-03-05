@@ -87,8 +87,12 @@ def plot_reconstructions(dataset, model, label=None, n_points=10, out=None, prep
             fig_path = out+'_%s'%name if len(vae_out) == 1 else out+'%s_%d'%(name, i)
             fig, ax = core.plot_distribution(vae_out['x_params'][i], target=data_pp[i], preprocessing=preprocessing, preprocess=preprocess, multihead=multihead_outputs, out=fig_path, **kwargs)
         fig_reinforced = None
+
+        figs.append(fig); axes.append(ax)
+        fig_path = out+'_%s_reinforced'%name if len(vae_out) == 1 else out+'%s_%d_reinforced'%(name, i)
         if vae_out.get('x_reinforced') is not None:
-            fig_reinforced, ax_reinforced = core.plot_distribution(vae_out['x_reinforced'][i], target=data_pp[i], preprocessing=preprocessing, preprocess=preprocess, out=out, multihead=multihead_outputs, **kwargs)
+            fig_reinforced, ax_reinforced = core.plot_distribution(vae_out['x_reinforced'][i], target=data_pp[i], preprocessing=preprocessing, preprocess=preprocess, out=fig_path, multihead=multihead_outputs, **kwargs)
+            figs.append(fig_reinforced); axes.append(ax_reinforced)
 
     """
     if not out is None:
@@ -107,7 +111,6 @@ def plot_reconstructions(dataset, model, label=None, n_points=10, out=None, prep
             if fig_reinforced is not None:
                 fig_reinforced.savefig(out+'/%s_reinforced_%d.pdf'%(name, i), format = 'pdf')
     """
-    figs.append(fig); axes.append(ax)
 
     del data; del vae_out
     return figs, axes
