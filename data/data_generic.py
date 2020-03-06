@@ -322,6 +322,8 @@ class Dataset(torch.utils.data.Dataset):
         :param bool exclusive: only select data ids with every provided ids, in case of multi-label information (default: False)
         """
         current_metadata = self.metadata.get(task)
+        if not hasattr(meta_id, '__iter__'):
+            meta_id = checklist(meta_id)
         assert current_metadata is not None, "task %s not found"%task
         if ids is None:
             ids = range(len(current_metadata))
@@ -333,7 +335,7 @@ class Dataset(torch.utils.data.Dataset):
                 ids = set(filter(lambda x: current_metadata[x] == m or m in checklist(current_metadata[x]), valid_ids)).intersection(ids)
             else:
                 ids = set(filter(lambda x: current_metadata[x] == m or m in checklist(current_metadata[x]), valid_ids)).union(ids)
-        return ids
+        return np.array(list(ids))
 
     def retrieve(self, idx):
         """

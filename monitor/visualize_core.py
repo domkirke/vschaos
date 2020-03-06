@@ -384,7 +384,7 @@ def plot_2d(current_z, meta=None, var=None, classes=None, class_ids=None, class_
     return fig, ax
 
 
-def plot_dims(current_z, meta=None, var=None, classes=None, class_ids=None, class_names=None, cmap='plasma', sequence=False, centroids=None, legend=True, shadow_z=None):
+def plot_dims(current_z, meta=None, var=None, classes=None, class_ids=None, class_names=None, cmap='plasma', sequence=False, centroids=None, legend=True, scramble=True):
     fig = plt.figure(figsize=(8,6))
     ax = fig.gca(projection='3d')
 
@@ -416,10 +416,16 @@ def plot_dims(current_z, meta=None, var=None, classes=None, class_ids=None, clas
 
     cs = np.array([cmap_hash[i] for i in meta])
     current_var = var if var is not None else np.zeros_like(current_z)
+
+    if scramble:
+        index_ids = np.random.permutation(current_z.shape[0])
+    else:
+        index_ids = np.arange(current_z.shape[0])
+
     for i in range(n_rows):
         for j in range(n_columns):
             current_dim =  i*n_columns+j
-            ax[i,j].scatter(current_z[:, current_dim], current_var[:, current_dim],
+            ax[i,j].scatter(current_z[index_ids, current_dim], current_var[index_ids, current_dim],
                           c=cmap(cs), s=0.8, marker=".")
             #ax[i, j].set_ylim([0, 1])
             ax[i,j].set_xticklabels(ax[i,j].get_xticks(), {'size':3})
@@ -479,7 +485,7 @@ def plot_pairwise_trajs(z_pos, var=None, **kwargs):
 
 
 
-def plot_3d(current_z, meta=None, var=None, classes=None, class_ids=None, class_names=None, cmap='plasma', sequence=False, centroids=None, legend=True, shadow_z=None):
+def plot_3d(current_z, meta=None, var=None, classes=None, class_ids=None, class_names=None, cmap='plasma', sequence=False, centroids=None, legend=True, shadow_z=None, scramble=True):
     fig = plt.figure(figsize=(8,6))
     ax = fig.gca(projection='3d')
     
@@ -496,21 +502,31 @@ def plot_3d(current_z, meta=None, var=None, classes=None, class_ids=None, class_
     current_var = (current_var - current_var.mean() / np.abs(current_var).max())+1
     meta = np.array(meta).astype(np.int)
 
+
+    n_examples = current_z.shape[0]
+    if scramble:
+        index_ids = np.random.permutation(n_examples)
+    else:
+        index_ids = np.arange(n_examples)
+
+
+
     # plot
     if sequence:
         if shadow_z is not None:
             for i in range(shadow_z.shape[0]):
-                ax.plot(shadow_z[i, :, 0], shadow_z[i, :,1], shadow_z[i, :,2], c=np.array([0.8, 0.8, 0.8, 0.4]))
-        for i in range(current_z.shape[0]):
+                ax.plot(shadow_z[i, :, 0], shadow_z[i, index_ids ,1], shadow_z[i, index_ids ,2], c=np.array([0.8, 0.8, 0.8, 0.4]))
+        for i in index_ids:
             ax.plot(current_z[i, :, 0], current_z[i, :,1],current_z[i, :,2], c=cmap(cmap_hash[meta[i]]), alpha = current_alpha)
             ax.scatter(current_z[i,0,0], current_z[i,0,1],current_z[i,0,2], c=cmap(cmap_hash[meta[0]]), alpha = current_alpha, marker='o')
             ax.scatter(current_z[i,-1,0], current_z[i,-1,1],current_z[i,-1,2], c=cmap(cmap_hash[meta[0]]), alpha = current_alpha, marker='+')
     else:
         cs = np.array([cmap_hash[m] for m in meta])
+        # pdb.set_trace()
         if current_z.shape[1]==2:
-            ax.scatter(current_z[:, 0], current_z[:,1], np.zeros_like(current_z[:,0]), c=cs, alpha = current_alpha, s=current_var)
+            ax.scatter(current_z[index_ids, 0], current_z[:,1], np.zeros_like(current_z[index_ids,0]), c=cs[index_ids], alpha = current_alpha, s=current_var)
         else:
-            ax.scatter(current_z[:, 0], current_z[:,1], current_z[:, 2], c=cs, alpha = current_alpha, s=current_var)
+            ax.scatter(current_z[index_ids, 0], current_z[index_ids,1], current_z[index_ids, 2], c=cs[index_ids], alpha = current_alpha, s=current_var)
     # make centroids
     if centroids and not meta is None:
         for i, cid in class_ids.items():

@@ -27,7 +27,7 @@ from ..modules.modules_convolution import *
 eps=1e-7
                 
 def plot_reconstructions(dataset, model, label=None, n_points=10, out=None, preprocess=True, preprocessing=None, partition=None,
-                         name=None, loader=None, ids=None, plot_multihead=False, reinforcers=None, **kwargs):
+                         epoch=None, name=None, loader=None, ids=None, plot_multihead=False, reinforcers=None, **kwargs):
 
     # get plotting ids
     if partition is not None:
@@ -64,8 +64,6 @@ def plot_reconstructions(dataset, model, label=None, n_points=10, out=None, prep
 
     with torch.no_grad():
         vae_out = model.forward(data_pp, y=metadata, **add_args)
-
-
     if reinforcers is not None:
         vae_out = reinforcers.forward(vae_out)
 
@@ -74,43 +72,35 @@ def plot_reconstructions(dataset, model, label=None, n_points=10, out=None, prep
         vae_out['x_reinforced'] = checklist(vae_out['x_reinforced'])
     data_pp = checklist(data_pp)
 
-    figs = []; axes = []
+    figs = {}; axes = {}
     if out:
         out += '/reconstruction/'
         check_dir(out)
 
+    suffix = ""
+    suffix = "_"+str(partition) if partition is not None else suffix
+    suffix = suffix+"_%d"%epoch if epoch is not None else suffix
     for i in range(len(vae_out['x_params'])):
         multihead_outputs = None
         if plot_multihead and hasattr(model.decoders[0].out_modules[0], 'current_outs'):
             multihead_outputs = model.decoders[0].out_modules[0].current_outs
-        if vae_out.get('x_params') is not None:
-            fig_path = out+'_%s'%name if len(vae_out) == 1 else out+'%s_%d'%(name, i)
-            fig, ax = core.plot_distribution(vae_out['x_params'][i], target=data_pp[i], preprocessing=preprocessing, preprocess=preprocess, multihead=multihead_outputs, out=fig_path, **kwargs)
-        fig_reinforced = None
 
-        figs.append(fig); axes.append(ax)
-        fig_path = out+'_%s_reinforced'%name if len(vae_out) == 1 else out+'%s_%d_reinforced'%(name, i)
+        if vae_out.get('x_params') is not None:
+            fig_path = name if len(vae_out) == 1 else '%s_%d'%(name, i)
+            fig, ax = core.plot_distribution(vae_out['x_params'][i], target=data_pp[i], preprocessing=preprocessing, preprocess=preprocess, multihead=multihead_outputs, out=fig_path, **kwargs)
+            figs[os.path.basename(fig_path)] = fig; axes[os.path.basename(fig_path)] = ax
+            if not out is None:
+                fig_path = f"{out}/{fig_path}{suffix}.pdf"
+                fig.savefig(fig_path, format="pdf")
+
+        fig_reinforced = None
         if vae_out.get('x_reinforced') is not None:
             fig_reinforced, ax_reinforced = core.plot_distribution(vae_out['x_reinforced'][i], target=data_pp[i], preprocessing=preprocessing, preprocess=preprocess, out=fig_path, multihead=multihead_outputs, **kwargs)
-            figs.append(fig_reinforced); axes.append(ax_reinforced)
-
-    """
-    if not out is None:
-        if issubclass(type(fig), list):
-            for head in range(0, len(fig)):
-                current_name = out+name+'_%d_%d.pdf'%(head, i)
-                fig[head].suptitle('head %d outputs %d'%(head, i))
-                fig[head].savefig(current_name, format="pdf")
-                if fig_reinforced is not None:
-                    fig_reinforced[head].savefig(out+name+'_reinforced_%d_%d.pdf'%(head, i), format = 'pdf')
-        else:
-            fig.suptitle('output %d'%i)
-            fig_path = out+'_%s.pdf'%name if len(vae_out) == 1 else out+'%s_%d.pdf'%(name, i)
-            fig.savefig(fig_path, format="pdf")
-
-            if fig_reinforced is not None:
-                fig_reinforced.savefig(out+'/%s_reinforced_%d.pdf'%(name, i), format = 'pdf')
-    """
+            fig_path = out+'_%s_reinforced'%name if len(vae_out) == 1 else out+'%s_%d_reinforced'%(name, i)
+            figs[os.path.basename(fig_path)+'_reinforced'] = fig; axes[os.path.basename(fig_path)+'_reinforced'] = ax
+            if not out is None:
+                fig_path = f"{out}/{name}{suffix}.pdf"
+                fig.savefig(fig_path, format="pdf")
 
     del data; del vae_out
     return figs, axes
@@ -177,13 +167,6 @@ def grid_latent(dataset, model, layer=-1, reduction=dr.PCA, n_points=None, ids=N
     plt.imshow(grid_img.transpose(0,2), aspect="auto")
 
     return [fig], [fig.axes]
-
-    
-    
-
-
-
-
 
 
 def image_export(dataset, model, label=None, n_rows=None, ids=None, out=None, partition=None, n_points=10, **kwargs):
@@ -641,6 +624,9 @@ def plot_latent2(dataset, model, transformation, n_points=None, tasks=None, clas
                         fig.legend(handles=handles)
                         
                 figs.append(fig)
+                suffix = ""
+                suffix = "_"+str(partition) if partition is not None else suffix
+                suffix = suffix+"_%d"%epoch if epoch is not None else suffix
                 if not out is None:
                     title = out+'_layer%d_%s.pdf'%(layer, task)
                     fig.savefig(title, format="pdf")
@@ -651,7 +637,7 @@ def plot_latent2(dataset, model, transformation, n_points=None, tasks=None, clas
 
 
 
-def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessing=None, label=None, tasks=None, ids=None, balanced=False, batch_size=None,
+def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessing=None, label=None, tasks=None, ids=None, balanced=False, batch_size=None, partition=None, epoch=None,
                    preprocess=True, loader=None, sample = False, layers=None, color_map="plasma", zoom=10, out=None, name=None, legend=True, centroids=False, sequence=False, prediction=None, *args, **kwargs):
     '''
     3-D plots the latent space of a model
@@ -683,6 +669,8 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
     if len(tasks) == 0 or tasks is None:
         tasks = [None] 
     full_ids = CollapsedIds()
+    if partition:
+        dataset = dataset.retrieve(partition)
     if n_points is not None:
         dataset = dataset.retrieve(np.random.permutation(len(dataset.data))[:n_points])
     if tasks == [None]:
@@ -713,7 +701,7 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
     vae_out = merge_dicts(output)
 
     ### plot!
-    figs = []; axes = []
+    figs = {}; axes = {}
     layers = layers or range(len(model.platent))
     if out:
         out += "/latent"
@@ -751,7 +739,7 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
                 meta = None; class_ids = {None:None}; classes=None; class_names=None
 
             legend = legend and len(class_ids)<12
-            if hasattr(checklist(meta)[0], '__iter__'):
+            if hasattr(meta[0], '__iter__'):
                 for k, v in class_ids[task].items():
                     class_names = {v:k for k, v in dataset.classes[task].items()}
                     current_ids = full_ids.transform(v)
@@ -760,34 +748,40 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
                     # register and export
                     fig_name = 'layer %d / task %s / class %s'%(layer, task, class_names[k]) if task else 'layer%d'%layer
                     fig.suptitle(fig_name)
-                    figs.append(fig); axes.append(ax)
+                    name = name or 'latent'
+                    title = '%s_layer%d_%s_%s'%(name,layer, task, class_names[k])
+                    figs[title] = fig; axes[title] = ax
                     if not out is None:
-                        name = name or 'latent'
-                        title = out+'%s_layer%d_%s_%s.pdf'%(name,layer, task, class_names[k])
+                        title = '%s%s.pdf'%(out, title)
                         fig.savefig(title, format="pdf")
-                    figs.append(fig); axes.append(ax)
             else:
-                class_names = {} if len(tasks) > 0 else {v:k for k, v in dataset.classes[task].items()}
+                class_names = {} if len(tasks) == 0 else {v:k for k, v in dataset.classes[task].items()}
                 fig, ax = core.plot(full_z[full_ids.get_ids(task)], meta=meta, var=full_var[full_ids.get_ids(task)], classes=nclasses[task], class_ids=class_ids, class_names=class_names, centroids=centroids, legend=legend)
                 # register and export
                 fig_name = 'layer %d / task %s'%(layer, task) if task else 'layer%d'%layer
                 fig.suptitle(fig_name)
-                figs.append(fig); axes.append(ax)
+                name = name or 'latent'
+                title = '%slayer%d_%s'%(name, layer, task)
+                figs[title] = fig; axes[title] = ax
+                print(figs.keys())
+                suffix = ""
+                suffix = "_"+str(partition) if partition is not None else suffix
+                suffix = suffix+"_%d"%epoch if epoch is not None else suffix
                 if not out is None:
-                    name = name or 'latent'
-                    title = out+'/%s_layer%d_%s.pdf'%(name, layer, task)
-                    fig.savefig(title, format="pdf")
+                    fig.savefig(f"{out}/{title}{suffix}.pdf", format="pdf")
     gc.collect(); gc.collect()
     return figs, axes
 
 
 def plot_latent_dim(dataset, model, label=None, tasks=None, n_points=None, layers=None, legend=True, out=None, ids=None, transformation=None, name=None,
-                    preprocess=True, loader=None, batch_size=None, balanced=True, preprocessing=None, sample=False, *args, **kwargs):
+                    partition=None, epoch=None, preprocess=True, loader=None, batch_size=None, balanced=True, preprocessing=None, sample=False, *args, **kwargs):
     ### prepare data IDs
     tasks = checklist(tasks)
     if len(tasks) == 0 or tasks is None:
         tasks = [None]
     full_ids = CollapsedIds()
+    if partition:
+        dataset = dataset.retrieve(partition)
     if n_points is not None:
         dataset = dataset.retrieve(np.random.permutation(len(dataset.data))[:n_points])
 
@@ -821,7 +815,7 @@ def plot_latent_dim(dataset, model, label=None, tasks=None, n_points=None, layer
     vae_out = merge_dicts(output)
 
     ### plot!
-    figs = []; axes = []
+    figs = {}; axes = {}
     layers = layers or list(range(len(model.platent)))
     transformation = checklist(transformation)
     if out:
@@ -863,17 +857,21 @@ def plot_latent_dim(dataset, model, label=None, tasks=None, n_points=None, layer
                 # register and export
                 fig_name = 'layer %d / task %s' % (layer, task) if task else 'layer%d' % layer
                 fig.suptitle(fig_name)
-                figs.append(fig);
-                axes.append(ax)
+
+                name = name or 'dims'
+                suffix = ""
+                suffix = "_"+str(partition) if partition is not None else suffix
+                suffix = suffix+"_%d"%epoch if epoch is not None else suffix
+
+                title = '%s_layer%d_%s_%s' % (name, layer, str(reduction), task)
                 if not out is None:
-                    name = name or 'dims'
-                    title = out + '/%s_layer%d_%s_%s.pdf' % (name, layer, str(reduction), task)
-                    fig.savefig(title, format="pdf")
+                    fig.savefig(f'{out}/{title}{suffix}.pdf', format="pdf")
+                figs[title] = fig; axes[title] = ax
 
     return figs, axes
 
 def plot_latent_consistency(dataset, model, label=None, tasks=None, n_points=None, layers=None, legend=True, out=None, ids=None, transformation=None, name=None,
-                    preprocess=True, loader=None, batch_size=None, partition=None, preprocessing=None, sample=False, *args, **kwargs):
+                     epoch=None, preprocess=True, loader=None, batch_size=None, partition=None, preprocessing=None, sample=False, *args, **kwargs):
 
     assert len(model.platent) > 1, "plot_latent_consistency is only made for hierarchical models"
     # get plotting ids
@@ -902,7 +900,7 @@ def plot_latent_consistency(dataset, model, label=None, tasks=None, n_points=Non
     vae_out = merge_dicts(output)
 
     ### plot!
-    figs = []; axes = []
+    figs = {}; axes = {}
     layers = layers or list(range(len(model.platent)))
     transformation = checklist(transformation)
     if out:
@@ -932,26 +930,32 @@ def plot_latent_consistency(dataset, model, label=None, tasks=None, n_points=Non
 
             full_z_enc = full_z_enc.detach().cpu().numpy(); full_z_dec = full_z_dec.detach().cpu().numpy()
             # iteration over tasks
-            figs, ax = core.plot_pairwise_trajs([full_z_enc, full_z_dec], var=[full_z_var_enc, full_z_var_dec])
+            fig, ax = core.plot_pairwise_trajs([full_z_enc, full_z_dec], var=[full_z_var_enc, full_z_var_dec])
 
             # register and export
             for i in range(len(ids)):
                 fig_name = dataset.files[ids[i]] or "consist_%d"%i
-                figs[i].suptitle(fig_name)
+                fig[i].suptitle(fig_name)
+                name = name or 'dims'
+                title = '/%s_%s_%s_%s'%(name, str(reduction), layer, i)
+                suffix = ""
+                suffix = "_"+str(partition) if partition is not None else suffix
+                suffix = suffix+"_%d"%epoch if epoch is not None else suffix
                 if not out is None:
-                    name = name or 'dims'
-                    title = out + '/%s_%s_%s_%s.pdf'%(name, str(reduction), layer, i)
-                    figs[i].savefig(title, format="pdf")
+                    fig[i].savefig(f"{out}/{title}{suffix}.pdf", format="pdf")
+                figs[title] = fig[i]; axes[title] = ax[i]
 
     return figs, axes
 
 
 
 def plot_latent_stats(dataset, model, label=None, tasks=None, n_points=None, layers=None, legend=True, out=None, preprocess=True,
-                      loader=None, partition=None, batch_size=None, balanced=True, preprocessing=None, *args, **kwargs):
+                      loader=None, epoch=None, partition=None, batch_size=None, balanced=True, preprocessing=None, *args, **kwargs):
 
     ### prepare data IDs
     ids = None # points ids in database
+    if partition:
+        dataset = dataset.retrieve(partition)
     layers = layers or range(len(model.platent))
     tasks = checklist(tasks)
     if len(tasks) == 0:
@@ -981,7 +985,7 @@ def plot_latent_stats(dataset, model, label=None, tasks=None, n_points=None, lay
     torch.cuda.empty_cache()
     vae_out = merge_dicts(output)
 
-    figs = []; axes = []
+    figs = {}; axes = {}
     if out:
         out += "/stats/"
         check_dir(out)
@@ -1001,10 +1005,11 @@ def plot_latent_stats(dataset, model, label=None, tasks=None, n_points=None, lay
                 ax2.bar(id_range+i*width, var_mean[i], width)
     #        ax1.set_xticklabels(np.arange(latent_dim), np.arange(latent_dim))
     #        ax2.set_xticklabels(np.arange(latent_dim), np.arange(latent_dim))
+
+            title = "stats_layer_%d"%layer
             if not out is None:
-                fig.savefig(out+'_layer%d.svg'%layer, format="svg")
-            figs.append(fig)
-            axes.append((ax1,ax2))
+                fig.savefig(out+'_layer%d.pdf'%layer, format="pdf")
+            figs[title] = fig; axes[title] = fig.axes
         else:
             if not issubclass(type(tasks), list):
                 tasks = [tasks]
@@ -1032,11 +1037,14 @@ def plot_latent_stats(dataset, model, label=None, tasks=None, n_points=None, lay
                     counter += 1
                 if legend:
                     fig.legend(handles=handles)
+
+                title = 'stats_layer%d_%s.pdf'%(layer, task)
+                figs[title] = fig; axes[title] = fig.axes
+                suffix = ""
+                suffix = "_"+str(partition) if partition is not None else suffix
+                suffix = suffix+"_%d"%epoch if epoch is not None else suffix
                 if not out is None:
-                    title = out+'_layer%d_%s.pdf'%(layer, task)
-                    fig.savefig(title, format="pdf")
-                figs.append(fig)
-                axes.append((ax1,ax2))
+                    fig.savefig(f"{out}/{title}{suffix}.pdf", format="pdf")
 
     # plot histograms
     return figs, axes
@@ -1164,8 +1172,8 @@ def plot_latent_dists(dataset, model, label=None, tasks=None, bins=20, layers=[0
 
 
 
-def plot_latent_trajs(dataset, model, transformation=None, n_points=None, preprocessing=None, label=None, tasks=None, ids=None, balanced=False, batch_size=None,
-                   preprocess=True, loader=None, sample = False, layers=None, color_map="plasma", zoom=10, out=None, name=None, legend=True, centroids=False, *args, **kwargs):
+def plot_latent_trajs(dataset, model, n_points=None, preprocessing=None, label=None, tasks=None, balanced=False, batch_size=None,
+                   partition=None, epoch=None, preprocess=True, loader=None, sample = False, layers=None, out=None, name=None, legend=True, centroids=False, *args, **kwargs):
     '''
     3-D plots the latent space of a model
     :param dataset: `vschaos.data.Dataset` object containing the data
@@ -1197,6 +1205,8 @@ def plot_latent_trajs(dataset, model, transformation=None, n_points=None, prepro
     if len(tasks) == 0 or tasks is None:
         raise TypeError('taks must not be %s'%tasks)
     full_ids = CollapsedIds()
+    if partition:
+        dataset = dataset.retrieve(partition)
     if n_points is not None:
         dataset = dataset.retrieve(np.random.permutation(len(dataset.data))[:n_points])
     if tasks == [None]:
@@ -1285,10 +1295,15 @@ def plot_latent_trajs(dataset, model, transformation=None, n_points=None, prepro
             # register and export
             fig_name = 'layer %d / task %s'%(layer, task)  if task else 'layer%d'%layer
             fig.suptitle(fig_name)
-            figs.append(fig); axes.append(axis)
+
+            name = name or 'trajs'
+            title = "%s_layer%d_%s"%(name,layer, task)
+            figs[title] = fig; axes[title] = axis
+            suffix = ""
+            suffix = "_"+str(partition) if partition is not None else suffix
+            suffix = suffix+"_%d"%epoch if epoch is not None else suffix
             if not out is None:
-                name = name or 'trajs'
-                title = out+'/%s_layer%d_%s.pdf'%(name,layer, task)
+                title = f"{out}/{title}{suffix}.pdf"
                 fig.savefig(title, format="pdf")
 
     gc.collect(); gc.collect()
@@ -1303,7 +1318,7 @@ def plot_latent_trajs(dataset, model, transformation=None, n_points=None, prepro
 ####
 
 
-def plot_losses(*args, loss=None, out=None, separated=False, axis="time", **kwargs):
+def plot_losses(*args, loss=None, out=None, separated=False, axis="time", partition=None, epoch=None, **kwargs):
     assert loss
     assert axis in ['time', 'epochs']
     # get set and loss names
@@ -1312,12 +1327,16 @@ def plot_losses(*args, loss=None, out=None, separated=False, axis="time", **kwar
     # get number of graphs
 
     n_rows, n_columns = core.get_divs(len(loss_names))
+    figs = {}; axes = {}
     if not separated:
         fig, ax = plt.subplots(n_rows, n_columns, figsize=(15,10))
+        figs['losses'] = fig; axes['losses'] = ax
     else:
         fig = [plt.Figure() for i in range(len(loss_names))]
         ax = [f.add_subplot(1,1,1) for f in fig]
         ax = np.array(ax).reshape(n_rows, n_columns)
+        for i in range(len(fig)):
+            figs[loss_names[i]] = fig[i]; axes[loss_names[i]] = ax[i]
 
     if n_columns == 1:
         ax = np.expand_dims(ax, 1)
@@ -1341,19 +1360,23 @@ def plot_losses(*args, loss=None, out=None, separated=False, axis="time", **kwar
 
     name = kwargs.get('name', 'losses')
     if not os.path.isdir(out+'/losses'):
-        os.makedirs(out+'/losses')
-    if out is not None:
-        if separated:
-            [fig[i].savefig(out+'/losses/%s_%s.pdf'%(name, loss_names[i]), format='pdf') for i in range(len(fig))]
-        else:
-            fig.savefig(out+'/losses/%s.pdf'%name, format='pdf')
+        out += '/losses'
+        check_dir(out)
+    suffix = ""
+    suffix = "_"+str(partition) if partition is not None else suffix
+    suffix = suffix+"_%d"%epoch if epoch is not None else suffix
+    if separated:
+        title = "%s_%s"%(name, loss_names[i])
+        if out is not None:
+            [fig[i].savefig(f"{out}/{title}{suffix}.pdf", format='pdf') for i in range(len(fig))]
+    else:
+        title = name
+        if out is not None:
+            fig.savefig(f"{out}/{title}{suffix}", format='pdf')
+    return figs, axes
 
-    fig = checklist(fig)
 
-    return fig, ax
-
-
-def plot_class_losses(dataset, model, evaluators, tasks=None, batch_size=512, partition=None, n_points=None, ids=None,
+def plot_class_losses(dataset, model, evaluators, tasks=None, batch_size=512, partition=None, n_points=None, ids=None, epoch=None,
                       label=None, loader=None, balanced=True, preprocess=False, preprocessing=None, out=None, name=None, **kwargs):
     assert tasks
      # get plotting ids
@@ -1394,7 +1417,7 @@ def plot_class_losses(dataset, model, evaluators, tasks=None, batch_size=512, pa
 
 
     # forward!
-    figs = []; axes = []
+    figs = {}; axes = {}
     for t in tasks:
         eval_dict = {}
         # obtain evaluations
@@ -1480,12 +1503,14 @@ def plot_class_losses(dataset, model, evaluators, tasks=None, batch_size=512, pa
                     loss_axis[loss_name].text(float(min_x), float(min_y), min_y_str,  fontsize=4, horizontalalignment='center', color=color_map(min_idx))
                     loss_axis[loss_name].text(float(max_x), float(max_y), max_y_str,  fontsize=4, horizontalalignment='center', color=color_map(max_idx))
 
+            title = '/class_losses_%s_%s'%(t, partition)
+            suffix = ""
+            suffix = "_"+str(partition) if partition is not None else suffix
+            suffix = suffix+"_%d"%epoch if epoch is not None else suffix
             if not out is None:
                 out_dir = out + '/class_losses'
                 check_dir(out_dir)
-                title = out_dir+'/class_losses_%s_%s.pdf'%(t, partition)
-                fig.savefig(title, format="pdf")
-            figs.append(fig); axes.append(ax)
+                fig.savefig(f"{out_dir}/{title}{epoch}.pdf", format="pdf")
 
     return figs, axes
 

@@ -105,18 +105,19 @@ class Monitor(object):
     def close(self):
         pass
 
-    def record_image(self, image_list, name, epoch=None):
+    def record_image(self, image_list, partition=None, epoch=None):
         if not self.use_tensorboard:
             return
-        images = []
-        for i, fig in enumerate(image_list):
+        for name, fig in image_list.items():
             cv = FigureCanvas(fig)
             cv.draw()
             width, height = fig.get_size_inches() * fig.get_dpi()
             image = fromstring(cv.tostring_rgb(), dtype='uint8').reshape(int(height), int(width), 3)
             image = np.transpose(image, (2,0,1)) / 255
+            if partition:
+                name = str(name)+'_%s'%partition
             if self.writer:
-                self.writer.add_image(name+'_'+str(i), image, epoch)
+                self.writer.add_image(name, image, epoch)
 
 
     def plot(self, out=None, epoch=None, loader=None, trainer=None, **kwargs):
@@ -145,7 +146,7 @@ class Monitor(object):
                         self.record_image(fig, '%s_%s_%s'%(plot, partition, i), epoch)
 
                 else:
-                    output_name = None if out is None else '/%s_%s_%s'%(plot, partition, epoch)
+                    output_name = None if out is None else plot
                     for pa in plot_args:
                         losses = pa.get('loss')
                         reinforcers = pa.get('reinforcers')
@@ -156,7 +157,7 @@ class Monitor(object):
 
                         fig, axes = plot_hash[plot](self.dataset, self.model, loader=loader,# preprocessing=preprocessing,
                                                     trainer=trainer, partition=partition, name=current_name, out=out,epoch=epoch, **pa)
-                        self.record_image(fig, '%s_%s_%s'%(plot, out+'/'+current_name, partition), epoch)
+                        self.record_image(fig, epoch=epoch, partition=partition)
 
     def synthesize(self, out=None, epoch=None, preprocessing=None, loader=None, trainer=None, **kwargs):
         # plot reconstructions
@@ -184,7 +185,7 @@ class Monitor(object):
                             self.writer.add_audio(output_name, audio, sr)
 
                 else:
-                    output_name = None if out is None else '/%s_%s_%s'%(plot, partition, epoch)
+                    output_name = None if out is None else plot
                     for pa in plot_args:
                         losses = pa.get('loss')
                         reinforcers = pa.get('reinforcers')
@@ -194,7 +195,8 @@ class Monitor(object):
                             del pa['name']
                         audio, sr = plot_hash[plot](self.dataset, self.model, loader=loader,# preprocessing=preprocessing,
                                                     trainer=trainer, partition=partition, name=current_name, out=out,epoch=epoch, **pa)
-                        self.writer.add_audio(current_name, audio, sr)
+                        for k, v in audio.items():
+                            self.writer.add_audio(k, v, sr)
 
         # if image_export:
         #     output_name = None if out is None else out+'/grid%s'%epoch_suffix

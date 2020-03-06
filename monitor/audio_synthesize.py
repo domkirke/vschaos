@@ -157,6 +157,7 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, me
             files = choices(dataset, k=n_files)
 
     transform = transform or transformOptions.get('transformType')
+    outputs = {}
     for i, current_file in enumerate(files):
         # get transform from file
         if transform is not None:
@@ -234,13 +235,12 @@ def resynthesize_files(dataset, model, transformOptions=None, transform=None, me
                                                      originalPhase=originalPhase,iterations=iterations, method=method)
             write_wav(original_out, current_transform, transformOptions.get('resampleTo', 22050), norm=norm)
 
-        del path_out; del signal_out;
         gc.collect(); gc.collect();
         torch.cuda.empty_cache()
+        outputs[original_out] = current_transform; outputs[path_out] = signal_out
 
-        return current_transform, transformOptions.get('resampleTo', 22050)
+    return outputs, transformOptions.get('resampleTo', 22050)
 
-    return None, []
 
 
 def trajectory2audio(model, traj_types, transformOptions, n_trajectories=1, n_steps=64, iterations=10, out=None,
