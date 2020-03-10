@@ -666,30 +666,36 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
 
     ### prepare data IDs
     tasks = checklist(tasks)
+    # check as list
     if len(tasks) == 0 or tasks is None:
         tasks = [None] 
     full_ids = CollapsedIds()
+    if ids is not None:
+        dataset = dataset.retrieve(ids)
+    # retrieve partition in case
     if partition:
         dataset = dataset.retrieve(partition)
+    # retrieve points
     if n_points is not None:
         dataset = dataset.retrieve(np.random.permutation(len(dataset.data))[:n_points])
+     # if no tasks are given, add indices as None
     if tasks == [None]:
-        full_ids.add(None, ids if ids is not None else np.random.permutation(len(dataset.data))[:n_points])
+        full_ids.add(None, ids if ids is not None else range(len(dataset)))
         nclasses = {None:None}; classes_ids = {}
     else:
-        #if n_points is not None:
-        #    ids = np.random.permutation(len(dataset.data))[:n_points]
+        # fill full_ids objects with corresponding classes, get classes index hash
         class_ids = {}; nclasses = {}
         for t in tasks:
             class_ids[t], nclasses[t] = core.get_class_ids(dataset, t, balanced=balanced, ids=ids, split=True)
             full_ids.add(t,np.concatenate(list(class_ids[t].values())))
 
-    ### forwarding
+    ### forward
     if not issubclass(type(label), list) and not label is None:
         label = [label]
     # preparing dataloader
     Loader = loader or DataLoader
-    loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks = label)
+    loader_ids = full_ids.get_full_ids()
+    loader = Loader(dataset, batch_size, ids=loader_ids, tasks = label, shuffle=False)
     # forward!
     output = []
     with torch.no_grad():
@@ -718,18 +724,29 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
             full_z = np.concatenate([x.mean.cpu().detach().numpy() for x in vae_out[layer]['out_params']], axis=0)
             full_var = np.concatenate([x.variance.cpu().detach().numpy() for x in vae_out[layer]['out_params']], axis=0)
             full_var = np.mean(full_var, tuple(range(1,full_var.ndim)))*zoom
+
+        # check if given latent vectors are sequences
+        sequence = sequence or len(full_z.shape) > 2
+
         # transform in case
+        """
         if full_z.shape[-1] > 3 and not sequence:
             assert transformation, 'if dimensionality > 3 please specify the transformation keyword'
             if issubclass(type(transformation), list):
                 transformation = transformation[layer]
+            original_shape = None
             if len(full_z.shape) == 3:
+                original_shape = full_z.shape
                 full_z = full_z.reshape(full_z.shape[0]*full_z.shape[1], *full_z.shape[2:])
             if issubclass(type(transformation), type):
                 full_z = transformation(n_components=3).fit_transform(full_z)
             else:
                 full_z = transformation.transform(full_z)
-           
+            if original_shape is not None:
+                full_z = full_z.reshape(*original_shape[:-1], full_z.shape[-1])
+        """
+        full_z = full_z[:,:,:3]
+
         # iteration over tasks
         for task in tasks:
             print('-- plotting task %s'%task)
@@ -756,14 +773,13 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
                         fig.savefig(title, format="pdf")
             else:
                 class_names = {} if len(tasks) == 0 else {v:k for k, v in dataset.classes[task].items()}
-                fig, ax = core.plot(full_z[full_ids.get_ids(task)], meta=meta, var=full_var[full_ids.get_ids(task)], classes=nclasses[task], class_ids=class_ids, class_names=class_names, centroids=centroids, legend=legend)
+                fig, ax = core.plot(full_z[full_ids.get_ids(task)], meta=meta, var=full_var[full_ids.get_ids(task)], classes=nclasses[task], class_ids=class_ids, class_names=class_names, centroids=centroids, legend=legend, sequence=sequence)
                 # register and export
                 fig_name = 'layer %d / task %s'%(layer, task) if task else 'layer%d'%layer
                 fig.suptitle(fig_name)
                 name = name or 'latent'
                 title = '%slayer%d_%s'%(name, layer, task)
                 figs[title] = fig; axes[title] = ax
-                print(figs.keys())
                 suffix = ""
                 suffix = "_"+str(partition) if partition is not None else suffix
                 suffix = suffix+"_%d"%epoch if epoch is not None else suffix
@@ -802,7 +818,7 @@ def plot_latent_dim(dataset, model, label=None, tasks=None, n_points=None, layer
         label = [label]
     # preparing dataloader
     Loader = loader or DataLoader
-    loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks=label)
+    loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks=label, shuffle=False)
     # forward!
     output = []
     with torch.no_grad():
@@ -887,7 +903,7 @@ def plot_latent_consistency(dataset, model, label=None, tasks=None, n_points=Non
         label = [label]
     # preparing dataloader
     Loader = loader or DataLoader
-    loader = Loader(dataset, batch_size, ids=ids, tasks=label)
+    loader = Loader(dataset, batch_size, ids=ids, tasks=label, shuffle=False)
     # forward!
     output = []
     with torch.no_grad():
@@ -974,7 +990,7 @@ def plot_latent_stats(dataset, model, label=None, tasks=None, n_points=None, lay
         label = [label]
     # preparing dataloader
     Loader = loader or DataLoader
-    loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks = label)
+    loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks = label, shuffle=False)
     # forward!
     output = []
     with torch.no_grad():
@@ -1222,7 +1238,7 @@ def plot_latent_trajs(dataset, model, n_points=None, preprocessing=None, label=N
         label = [label]
     # preparing dataloader
     Loader = loader or DataLoader
-    loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks = label)
+    loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks = label, shuffle=False)
     # forward!
     output = []
     with torch.no_grad():
@@ -1359,8 +1375,8 @@ def plot_losses(*args, loss=None, out=None, separated=False, axis="time", partit
             ax[i,j].set_title(current_loss)
 
     name = kwargs.get('name', 'losses')
+    out += '/losses'
     if not os.path.isdir(out+'/losses'):
-        out += '/losses'
         check_dir(out)
     suffix = ""
     suffix = "_"+str(partition) if partition is not None else suffix
@@ -1372,7 +1388,7 @@ def plot_losses(*args, loss=None, out=None, separated=False, axis="time", partit
     else:
         title = name
         if out is not None:
-            fig.savefig(f"{out}/{title}{suffix}", format='pdf')
+            fig.savefig(f"{out}/{title}{suffix}.pdf", format='pdf')
     return figs, axes
 
 
@@ -1395,7 +1411,7 @@ def plot_class_losses(dataset, model, evaluators, tasks=None, batch_size=512, pa
         full_ids.add(t, np.concatenate(list(class_ids[t].values())))
 
     Loader = loader if loader else DataLoader
-    loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks = label)
+    loader = Loader(dataset, batch_size, ids=full_ids.get_full_ids(), tasks = label, shuffle=False)
     # forward
     add_args = {}
     if hasattr(model, 'prediction_params'):

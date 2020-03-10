@@ -72,7 +72,6 @@ class TensorboardHandler(object):
                 # write last losses
                 # pdb.set_trace()
                 last_loss = {k: np.array(v[l]['values'][-1]) if len(v) > 0 else 0. for k, v in loss.loss_history.items()}
-                print(l, epoch, last_loss)
                 self.writer.add_scalars('loss_%s/'%l, last_loss, epoch)
 
     def add_image(self, name, pic, epoch):
@@ -95,6 +94,7 @@ class Monitor(object):
         self.plots = plots
         self.synth = synth
         self.partitions = partitions
+        self.writer = None
         if use_tensorboard:
             self.writer = TensorboardHandler(use_tensorboard)
             
@@ -195,8 +195,9 @@ class Monitor(object):
                             del pa['name']
                         audio, sr = plot_hash[plot](self.dataset, self.model, loader=loader,# preprocessing=preprocessing,
                                                     trainer=trainer, partition=partition, name=current_name, out=out,epoch=epoch, **pa)
-                        for k, v in audio.items():
-                            self.writer.add_audio(k, v, sr)
+                        if self.writer:
+                            for k, v in audio.items():
+                                self.writer.add_audio(k, v, sr)
 
         # if image_export:
         #     output_name = None if out is None else out+'/grid%s'%epoch_suffix

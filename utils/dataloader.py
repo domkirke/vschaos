@@ -31,7 +31,7 @@ class DataLoader(object):
     is_sequence = False
     num_workers = 0
     def __init__(self, dataset, batch_size, tasks=None, partition=None, ids=None, is_sequence=None,
-                 pin_memory=False, num_workers=0, preprocessing=None, *args, **kwargs):
+                 pin_memory=False, num_workers=0, preprocessing=None, shuffle=True, *args, **kwargs):
         self.dataset = dataset
         self.preprocessing = preprocessing
 
@@ -50,8 +50,8 @@ class DataLoader(object):
 
         num_workers = kwargs.get('num_workers', 0) or self.num_workers 
         loader_args = {'pin_memory':pin_memory, 'num_workers':num_workers or 0}
-  
-        self.dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, drop_last=False, shuffle=True, **loader_args)
+
+        self.dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, drop_last=False, shuffle=shuffle, **loader_args)
 
         # metadata to retrieve
         self.tasks = tasks

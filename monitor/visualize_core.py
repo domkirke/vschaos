@@ -330,9 +330,9 @@ def plot_latent_path(zs, data, synth, reduction=None):
 
 
 def plot(current_z, *args, **kwargs):
-    if current_z.shape[1] == 2:
+    if current_z.shape[-1] == 2:
         fig, ax = plot_2d(current_z, *args, **kwargs)
-    elif current_z.shape[1] >= 3:
+    elif current_z.shape[-1] >= 3:
         fig, ax = plot_3d(current_z, *args, **kwargs)
     return fig, ax
 
@@ -502,14 +502,11 @@ def plot_3d(current_z, meta=None, var=None, classes=None, class_ids=None, class_
     current_var = (current_var - current_var.mean() / np.abs(current_var).max())+1
     meta = np.array(meta).astype(np.int)
 
-
     n_examples = current_z.shape[0]
     if scramble:
         index_ids = np.random.permutation(n_examples)
     else:
         index_ids = np.arange(n_examples)
-
-
 
     # plot
     if sequence:
@@ -518,8 +515,9 @@ def plot_3d(current_z, meta=None, var=None, classes=None, class_ids=None, class_
                 ax.plot(shadow_z[i, :, 0], shadow_z[i, index_ids ,1], shadow_z[i, index_ids ,2], c=np.array([0.8, 0.8, 0.8, 0.4]))
         for i in index_ids:
             ax.plot(current_z[i, :, 0], current_z[i, :,1],current_z[i, :,2], c=cmap(cmap_hash[meta[i]]), alpha = current_alpha)
-            ax.scatter(current_z[i,0,0], current_z[i,0,1],current_z[i,0,2], c=cmap(cmap_hash[meta[0]]), alpha = current_alpha, marker='o')
-            ax.scatter(current_z[i,-1,0], current_z[i,-1,1],current_z[i,-1,2], c=cmap(cmap_hash[meta[0]]), alpha = current_alpha, marker='+')
+            color = np.array(cmap(cmap_hash[meta[i]]))[np.newaxis]
+            ax.scatter(current_z[i,0,0], current_z[i,0,1],current_z[i,0,2], c=color, alpha = current_alpha, marker='o')
+            ax.scatter(current_z[i,-1,0], current_z[i,-1,1],current_z[i,-1,2], c=color, alpha = current_alpha, marker='+')
     else:
         cs = np.array([cmap_hash[m] for m in meta])
         # pdb.set_trace()

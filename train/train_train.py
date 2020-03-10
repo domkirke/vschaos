@@ -93,7 +93,7 @@ class SimpleTrainer(Trainer):
         #pdb.set_trace()
         apply_method(self.models, 'step', loss)
         apply_method(self.losses, 'step', loss)
-        #print_grad_stats(self.models)
+        # print_grad_stats(self.models)
 
     def train(self, partition=None, write=False, batch_size=64, tasks=None, batch_cache_size=1, **kwargs):
         # set models and partition to train
