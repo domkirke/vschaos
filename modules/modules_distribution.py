@@ -131,13 +131,13 @@ class GaussianLayer1D(nn.Module):
         if issubclass(type(dist), Flow):
             dist_type = dist.dist
 
-        if dist_type == Normal:
-            return dist(mu, sigmoid(std))
+        if dist_type in [Normal, RandomWalk]:
+            return Normal(mu, sigmoid(std))
         elif dist_type == MultivariateNormal:
             #TODO full covariance parametrization
             return dist(mu, covariance_matrix=sigmoid(std).unsqueeze(1) * eye(mu.shape[1]))
-        elif dist_type == RandomWalk:
-            return dist(mu, sigmoid(std))
+        # elif dist_type == RandomWalk:
+        #     return dist(mu, sigmoid(std))
         #return Normal(mu, sqrt(exp(logvar)))
     
 

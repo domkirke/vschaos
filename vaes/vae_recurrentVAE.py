@@ -240,8 +240,13 @@ class ShrubVAE(VanillaVAE):
             #pdb.set_trace()
             '''
             #pdb.set_trace()
-            path_length = self.phidden[layer].get('path_length', current_z.shape[1])
+            if self.phidden[layer].get('encoder'):
+                path_length = self.phidden[layer]['encoder'].get('path_length') or current_z.shape[1]
+            else:
+                path_length = self.phidden[layer].get('path_length') or current_z.shape[1]
+                dist_type = self.phidden[layer].get('dist') or dist.Normal
             n_seq = math.ceil(current_z.shape[1]/path_length)
+            dist_type = self.platent[layer].get('dist') or dist.Normal
             if current_z.shape[1] != n_seq * path_length:
                 device = next(self.parameters()).device
                 current_z = torch.cat([current_z, torch.zeros(current_z.shape[0], n_seq * path_length - current_z.shape[1], *current_z.shape[2:]).to(device)], dim=1)
@@ -250,6 +255,8 @@ class ShrubVAE(VanillaVAE):
             return_hidden = self.requires_recurrent and layer == len(self.platent) - 1
             current_out = self.encoders[layer](current_z, y=y, clear=clear, return_hidden = return_hidden)
             current_out['out_params'] = current_out['out_params'].view(n_batches, n_seq, self.platent[layer]['dim'])
+            if issubclass(dist_type, dist.RandomWalk):
+                current_out['out_params'] = dist.RandomWalk(current_out['out_params'].mean, current_out['out_params'].stddev)
             if current_out.get('out') is None:
                 current_out['out'] = apply_method(current_out['out_params'], 'rsample')
             if return_hidden:
@@ -292,11 +299,22 @@ class ShrubVAE(VanillaVAE):
         if target_seq:
             cum_size = target_seq
             for i in range(1, len(z_all)):
-                previous_step = self.phidden[i].get('path_length') or cum_size
+                if self.phidden[i].get('decoder'):
+                    previous_step = self.phidden[i]['decoder'].get('path_length') or cum_size
+                else:
+                    previous_step = self.phidden[i].get('path_length') or cum_size
                 steps.append(previous_step)
                 cum_size = int(ceil(cum_size / steps[-1]))
         else:
-            steps = [self.phidden[i].get('path_length', 1) for i in range(1, len(self.phidden))]
+            if self.phidden[i].get('decoder'):
+                steps = [None] * len(self.phidden[i].get('decoder')) - 1
+                for i in range(1, len(self.phidden[i]['decoder'])):
+                    steps[i-1] = self.phidden[i]['decoder'].get('path_length') or current_z.shape[1]
+            else:
+                steps = [None] * len(self.phidden[i]) - 1
+                for i in range(1, len(self.phidden[i])):
+                    steps[i-1] = self.phidden[i].get('path_length') or current_z.shape[1]
+            # steps = [self.phidden[i].get('path_length', 1) for i in range(1, len(self.phidden))]
 
 
         # init number of steps for each layer
