@@ -1160,7 +1160,12 @@ class Dataset(torch.utils.data.Dataset):
         ids = set(); 
         for cn in class_names:
             ids = ids.union(set(self.get_ids_from_class(self.classes[task][cn], task)))
-        valid_ids = list(set(list(range(len(self)))).difference(ids))
+        cur_length = len(self.data)
+        if len(self.data) == 0:
+            cur_length = len(self.metadata[list(self.metadata.keys())[0]])
+        assert cur_length != 0, "please import data or metadata before filtering "
+
+        valid_ids = list(set(list(range(cur_length))).difference(ids))
         return self.retrieve(valid_ids)
 
 

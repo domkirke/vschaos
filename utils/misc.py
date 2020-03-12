@@ -578,4 +578,27 @@ def generate_conditioning_mesh(label_params):
     return ys
 
 
+def parse_filtered_classes(dataset, string_args):
+    if string_args[0][0] != "#":
+        raise SyntaxError('parse_filtered_classes : string must begin with a task')
+    tasks_parsed = {}
+    current_task = None
+    for str in string_args:
+        if str[0] == "#":
+            assert str[1:] in dataset.tasks, "task %s not found in dataset %s"%(str, dataset)
+            current_task = str[1:]
+            tasks_parsed[current_task] = []
+        else:
+            # tasks_parsed[current_task].extend(dataset.get_ids_from_class(dataset.classes[current_task][str], current_task))
+            tasks_parsed[current_task].append(str)
+    # ids = np.unique(np.array(sum(tasks_parsed.values(), [])))
+
+    return tasks_parsed
+
+
+
+
+
+
+
 
