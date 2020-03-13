@@ -586,7 +586,6 @@ class OfflineDatasetAudio(DatasetAudio):
                     continue
                 curAnalysisFile = files
 
-
             if issubclass(type(curAnalysisFile), list):
                 print('[%d/%d] adding %s...'%(i, len(curBatch), f))
                 finalData.append(asyn.OfflineDataList([self.entry_class(c) for c in curAnalysisFile], padded=padded))
@@ -612,7 +611,7 @@ class OfflineDatasetAudio(DatasetAudio):
         idx = 0
         for i in range(len(self.data)):
             # update minimum content shape
-            chunk_to_add = selector(self.data[i].entries)
+            chunk_to_add = selector(self.data.entries[i].split())
             newData.extend(chunk_to_add)
             for k, _ in newMetadata.items():
                 newMetadata[k].extend([self.metadata[k][i]]*len(chunk_to_add))
@@ -628,6 +627,7 @@ class OfflineDatasetAudio(DatasetAudio):
             idx += len(chunk_to_add)
 
         self.data = asyn.OfflineDataList(newData, dtype=newData[0]._dtype, padded=padded)
+        self.data.squeeze(1)
         self.metadata = newMetadata
         for k,v in newMetadata.items():
             newMetadata[k] = np.array(v)

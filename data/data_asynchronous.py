@@ -16,6 +16,7 @@ class NoShapeError(Exception):
     pass
 
 
+
 class OfflineEntry(object):
     """
     Simple object that contains a file pointer, and a selector callback. Don't have the *shape* attribute if not loaded
@@ -74,6 +75,20 @@ class OfflineEntry(object):
             self()
             #raise NoShapeError('OfflineEntry has to be called once to retain shape')
         return self._shape
+
+    def split(self, axis=0):
+        if self.shape is None:
+            raise NoShapeError()
+        if len(self.shape) < 2 or axis > len(self.shape):
+            raise ValueError('%s with shape %s cannot be split among axis %d'%(type(self), self.shape, axis))
+        entries = []
+        ref_idx = [None]*len(self.shape)
+        for i in range(self.shape[axis]):
+            entry_ids = list(ref_idx); entry_ids[axis] = i
+            entries.append(type(self)(self.file, func=lambda x: x.__getitem__(slice(*tuple(entry_ids)))))
+        return entries
+    
+
          
 
 
@@ -351,11 +366,13 @@ class OfflineDataList(object):
         """
         if self._shape is None:
             raise Warning('Tried to squeeze %s, but shape is missing')
+        if self._shape[dim] != 1:
+            raise ValueError('cannot select an axis to squeeze out which has size not equal to one')
+        if dim >= len(self._shape):
+            raise np.AxisError('axis 4 is out of bounds for array of dimension 3'%(dim, len(self._shape)))
         self._transforms.append((np.squeeze, {'axis':dim}))
-        new_shape = list()
-        for dim in self._shape[0]:
-            if dim > 1:
-                new_shape.append(dim)
+        new_shape = list(self._shape)
+        del new_shape[dim]
         self._shape = tuple(new_shape)
 
     def expand_dims(self, dim):
@@ -414,8 +431,7 @@ class OfflineDataList(object):
                 #     self._dtype = self.entries[0]._dtype
             else:
                 raise ValueError('expected OfflineDataList or list, but got : %s'%type(args[0]))
-            
-        if len(args) > 1:
+        elif len(args) > 1:
             if issubclass(type(args[0]), str):
                 if len(args) == 2:
                     file, data = args
@@ -431,6 +447,7 @@ class OfflineDataList(object):
                         self.check_entries(self.entries)
             else:
                 raise ValueError('expected (str, int), but got : (%s, %s)'%(type(args[0]), type(args[1])))
+
         if transforms is not None:
             self._transforms = transforms
 
