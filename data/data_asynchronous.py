@@ -15,11 +15,38 @@ from ..utils import checktuple
 class NoShapeError(Exception):
     pass
 
+class ShapeError(Exception):
+    def __init__(self, true_shape, false_shape):
+        self.true_shape = true_shape
+        self.false_shape = false_shape
+    def __repr__(self):
+        print('ShapeError(%s != %s)'%(self.true_shape, self.false_shape))
+
 class Selector(object):
-    def __init__(self, i):
-        self.i = i
-    def __call__(self, x):
-        return x[self.i]
+    """takes everything"""
+    def __init__(self):
+        pass
+
+    def get_shape(self, shape):
+        return shape
+
+    def __call__(self, file, shape=None, dtype=np.float, **kwargs):
+        return np.memmap(file, dtype=dtype, mode='r', offset=0, shape=shape)
+
+
+class IndexPick(Selector):
+    def __init__(self, idx, axis=0):
+        self.idx =  idx; self.axis = axis
+
+    def get_shape(self, shape):
+        return shape[self.axis+1:]
+
+    def __call__(self, file, shape=None, axis=0, dtype=np.float, idx=None, strides=None, **kwargs):
+        assert axis==0, "memmap indexing on axis > 0 is not implemented yet"
+        idx = idx or self.idx
+        offset = (idx * shape[1])*strides[1]
+        return np.memmap(file, dtype=dtype, mode='r', offset=offset, shape=self.get_shape(shape))
+
 
 
 class OfflineEntry(object):
@@ -30,7 +57,7 @@ class OfflineEntry(object):
     def __repr__(self):        
         return "OfflineEntry(lambda %s of file %s)"%(self.func, self.file)
     
-    def __init__(self, file, func=lambda x: x, dtype=None, target_length=None):
+    def __init__(self, file, selector=Selector(), dtype=None, shape=None, strides=None, target_length=None):
         """
         :param file: numpy file to load (.npy / .npz)
         :type file: str
@@ -43,12 +70,21 @@ class OfflineEntry(object):
         """
         if issubclass(type(file), OfflineEntry):
             self.file = file.file
-            self.func = file.func
+            self.selector = selector or file.selector
+            self.strides = strides or file.strides
+            self._dtype = file.dtype
         else:
             self.file = file
-            self.func = func
-        self._shape = None
-        self._dtype = dtype
+            self.selector = selector
+            self.strides =  strides
+            self._dtype = dtype
+
+        self._pre_shape = shape
+        if shape is not None:
+            if self.selector is not None:
+                self._post_shape = self.selector.get_shape(self._pre_shape)
+            else:
+                self._post_shape = self._pre_shape
         self.target_length = None if target_length is None else tuple(target_length)
         
     def __call__(self, file=None):
@@ -58,39 +94,46 @@ class OfflineEntry(object):
         :type file: str
         :return: array of data
         """
-        if file is None:
-            file = np.load(self.file)
-            if hasattr(file, 'keys'):
-                file = file['arr_0']
-        data = self.func(file)
+        file = file or self.file
+        data = self.selector(file, shape=self._pre_shape, dtype=self.dtype, strides=self.strides)
+        if data.shape != self.shape:
+            raise ShapeError(data.shape, self.shape)
 
         if self.target_length:
             pads = []
             for i, tl in enumerate(self.target_length):
                 pads.append((0, tl-data.shape[i]))
             data = np.pad(data, pads, mode="constant", constant_values=0)
-        if not data is None:
-            self._shape = data.shape
-        if self._dtype:
+        if self._post_shape is None:
+            self._post_shape = data.shape
+        if self._dtype is None:
             data = data._dtype
-
-        return data
+        return np.array(data)
     
     @property
     def shape(self):
-        if self._shape is None:
+        shape = self._post_shape or self._pre_shape
+        if shape is None:
             self()
             #raise NoShapeError('OfflineEntry has to be called once to retain shape')
-        return self._shape
+        return self._post_shape
+
+    @property
+    def dtype(self):
+        if self._dtype is None:
+            raise TypeError('type of entry %s is not known yet'%self)
+        return self._dtype
 
     def split(self, axis=0):
+        if axis > 0:
+            raise NotImplementedError
         if self.shape is None:
             raise NoShapeError()
         if len(self.shape) < 2 or axis > len(self.shape):
             raise ValueError('%s with shape %s cannot be split among axis %d'%(type(self), self.shape, axis))
         entries = [None]*self.shape[axis]
         for i in range(self.shape[axis]):
-            entries[i] = type(self)(self.file, func=Selector(i))
+            entries[i] = type(self)(self.file, dtype=self.dtype, shape=self.shape, strides=self.strides, selector=IndexPick(i))
         return entries
     
 

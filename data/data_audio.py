@@ -17,7 +17,7 @@ except:
     from matplotlib import pyplot as plt
     
     
-import pdb, torch
+import pdb, torch, dill
 import numpy as np
 import os
 import re
@@ -565,21 +565,25 @@ class OfflineDatasetAudio(DatasetAudio):
         padded = options.get('padded')
         finalData = []
         finalMeta = []
+        parsing_dict = None
+        if os.path.isfile(f"{self.analysisDirectory}/{transformName}/parsing.vs"):
+            parsing_file = open(f"{self.analysisDirectory}/{transformName}/parsing.vs", "rb")
+            parsing_dict = dill.load(parsing_file)
+            parsing_file.close()
+        else:
+            print('[Warning] parsing.vs file not found. may provide degenerated data')
+
         for i,f in enumerate(curBatch):
             curAnalysisFile = re.sub(dataDirectory, analysisDirectory+'/'+transformName, f)
             curAnalysisFile = ".".join(curAnalysisFile.split(".")[:-1])
-            if os.path.exists(curAnalysisFile+'.npy'):
-                curAnalysisFile = curAnalysisFile + '.npy'
-            elif os.path.exists(curAnalysisFile+'.npz'):
-                curAnalysisFile = curAnalysisFile + '.npz'
+            if os.path.exists(curAnalysisFile+'.dat'):
+                curAnalysisFile = curAnalysisFile + '.dat'
+            # elif os.path.exists(curAnalysisFile+'.npz'):
+            #     curAnalysisFile = curAnalysisFile + '.npz'
             else:
                 files = []; idx = 0;
                 name=curAnalysisFile
-                while os.path.exists(name+'_%d'%idx+'.npz') or os.path.exists(name+'_%d'%idx+'.npy'):
-                    if os.path.exists(name+'_%d'%idx+'.npz'):
-                        files.append(name+'_%d'%idx+'.npz')
-                    else:
-                        files.append(name+'_%d'%idx+'.npy')
+                while os.path.exists(name+'_%d'%idx+'.dat'):
                     idx += 1
                 if len(files) == 0:
                     print('[Warning] did not found file %s'%curAnalysisFile)
@@ -591,7 +595,11 @@ class OfflineDatasetAudio(DatasetAudio):
                 finalData.append(asyn.OfflineDataList([self.entry_class(c) for c in curAnalysisFile], padded=padded))
                 finalMeta.append([0]*len(curAnalysisFile));
             else:
-                finalData.append(self.entry_class(curAnalysisFile))
+                curRealName = re.sub(f'{self.analysisDirectory}/{transformName}', '', curAnalysisFile)
+                shape = None if parsing_dict is None else parsing_dict[curRealName]['shape']
+                dtype = np.float if parsing_dict is None else parsing_dict[curRealName]['dtype']
+                strides = np.float if parsing_dict is None else parsing_dict[curRealName]['strides']
+                finalData.append(self.entry_class(curAnalysisFile, shape=shape, dtype=dtype, strides=strides))
                 finalMeta.append(0);
         return finalData, finalMeta
 
@@ -645,8 +653,6 @@ class OfflineDatasetAudio(DatasetAudio):
         dataset = DatasetAudio.load_save_dict(loaded)
         dataset.data = loaded['dataset']['entries']
         return dataset
-
-
 
     def load_offline_entries(self, offline_entries=None):
         directory = options.get('analysisDirectory', self.analysisDirectory) if offline_entries is None else offline_entries
