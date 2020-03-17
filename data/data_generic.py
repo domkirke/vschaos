@@ -650,6 +650,13 @@ class Dataset(torch.utils.data.Dataset):
                     metaList.append({})
 
         # Save the lists
+        if None in metaList:
+            for i in range(len(metaList)):
+                if metaList[i] is None:
+                    metaList[i] = [-1]
+            classList['None'] = -1
+
+        #pdb.set_trace()
         self.metadata[task] = np.array(metaList);
         label_files = '/'.join(fileName.split('/')[:-1])+'/classes.txt'
         if os.path.isfile(label_files):

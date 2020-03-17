@@ -9,7 +9,7 @@
 
 """
 
-import re
+import re, pdb
 import numpy as np
 
 """
@@ -258,11 +258,14 @@ def importRawLabel(metadata, classes, options):
     return idx, classes
 
 def importRawMultiLabel(metadata, classes, options):
+
     if (metadata is None):
-        return None
-    labels = []
-    for label in re.findall('([^,]+)', metadata):
-        labels.append(label)
+        if classes.get('None') is None:
+            classes['None'] = -1
+        return [-1], classes
+    labels = metadata.split("'")[1::2]
+    #for label in re.findall('([^,]+)', metadata):
+    #    labels.append(label)
     idxs = [];
     for label in (labels):
         if label[0]==label[-1]=="'":

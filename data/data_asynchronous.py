@@ -15,6 +15,11 @@ from ..utils import checktuple
 class NoShapeError(Exception):
     pass
 
+class Selector(object):
+    def __init__(self, i):
+        self.i = i
+    def __call__(self, x):
+        return x[self.i]
 
 
 class OfflineEntry(object):
@@ -58,6 +63,7 @@ class OfflineEntry(object):
             if hasattr(file, 'keys'):
                 file = file['arr_0']
         data = self.func(file)
+
         if self.target_length:
             pads = []
             for i, tl in enumerate(self.target_length):
@@ -67,6 +73,7 @@ class OfflineEntry(object):
             self._shape = data.shape
         if self._dtype:
             data = data._dtype
+
         return data
     
     @property
@@ -81,11 +88,9 @@ class OfflineEntry(object):
             raise NoShapeError()
         if len(self.shape) < 2 or axis > len(self.shape):
             raise ValueError('%s with shape %s cannot be split among axis %d'%(type(self), self.shape, axis))
-        entries = []
-        ref_idx = [None]*len(self.shape)
+        entries = [None]*self.shape[axis]
         for i in range(self.shape[axis]):
-            entry_ids = list(ref_idx); entry_ids[axis] = i
-            entries.append(type(self)(self.file, func=lambda x: x.__getitem__(slice(*tuple(entry_ids)))))
+            entries[i] = type(self)(self.file, func=Selector(i))
         return entries
     
 

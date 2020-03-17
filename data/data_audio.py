@@ -627,7 +627,6 @@ class OfflineDatasetAudio(DatasetAudio):
             idx += len(chunk_to_add)
 
         self.data = asyn.OfflineDataList(newData, dtype=newData[0]._dtype, padded=padded)
-        self.data.squeeze(1)
         self.metadata = newMetadata
         for k,v in newMetadata.items():
             newMetadata[k] = np.array(v)
