@@ -55,7 +55,8 @@ class SelectorChain(Selector):
 
 
 class IndexPick(Selector):
-    def __init__(self, idx, axis=0):
+    def __init__(self, idx=None, axis=0):
+        assert idx
         self.idx =  idx; self.axis = axis
 
     def  __repr__(self):
@@ -73,6 +74,33 @@ class IndexPick(Selector):
         offset = (idx * shape[1])*strides[1]
         return np.memmap(file, dtype=dtype, mode='r', offset=offset, shape=self.get_shape(shape))
 
+
+class SequencePick(Selector):
+    def __init__(self, sequence_length=None, random_idx=True):
+        assert sequence_length
+        self.sequence_length =  sequence_length
+        self.random_idx = random_idx
+
+    def  __repr__(self):
+        return "SequencePick(%d, random_idx:%s)"%(self.sequence_length, self.random_idx)
+
+    def __getitem__(self):
+        raise NotImplementedError
+
+    def get_shape(self, shape):
+        return (self.sequence_length, *shape[1:])
+
+    def __call__(self, file, shape=None, axis=0, dtype=np.float, idx=None, strides=None, **kwargs):
+        assert axis==0, "memmap indexing on axis > 0 is not implemented yet"
+        idx = 0 if not self.random_idx else np.random.randint(max(0, shape[0] - self.sequence_length))
+        offset = (idx * shape[1])*strides[1]
+        load_shape = shape if shape[0] < self.sequence_length else self.get_shape(shape)
+        data = np.memmap(file, dtype=dtype, mode='r', offset=offset, shape=load_shape)
+        if data.shape[0] < self.sequence_length:
+            pads = [(0,0)]*len(shape)
+            pads[0] = (0, self.sequence_length - data.shape[0])
+            data = np.pad(np.array(data), pad_width=pads, mode="constant", constant_values=0)
+        return data
 
 class RandomPick(Selector):
     def __init__(self, range=None, axis=0):
@@ -143,10 +171,17 @@ class OfflineEntry(object):
         :param target_length: specifies a target_length for the imported data, pad/cut in case
         :type target_length: int
         """
+
+        self._pre_shape = shape
+        self.target_length = target_length
         if issubclass(type(file), OfflineEntry):
             self.file = file.file
             self.selector = selector or file.selector
             self.strides = strides or file.strides
+            self._pre_shape = file.shape
+            self._post_shape = self.selector.get_shape(file._pre_shape)
+            if not target_length is None:
+                self._post_shape = tuple(target_length)
             self._dtype = file.dtype
         else:
             self.file = file
@@ -154,14 +189,12 @@ class OfflineEntry(object):
             self.strides =  strides
             self._dtype = dtype
 
-        self._pre_shape = shape
         if shape is not None:
             if self.selector is not None:
                 self._post_shape = self.selector.get_shape(self._pre_shape)
             else:
                 self._post_shape = self._pre_shape
-        self.target_length = None if target_length is None else tuple(target_length)
-        
+
     def __call__(self, file=None):
         """
         loads the file and extracts data
@@ -171,14 +204,16 @@ class OfflineEntry(object):
         """
         file = file or self.file
         data = self.selector(file, shape=self._pre_shape, dtype=self.dtype, strides=self.strides)
-        if data.shape != self.shape:
-            raise ShapeError(data.shape, self.shape)
 
-        if self.target_length:
+        if not self.target_length is None:
             pads = []
             for i, tl in enumerate(self.target_length):
                 pads.append((0, tl-data.shape[i]))
             data = np.pad(data, pads, mode="constant", constant_values=0)
+
+        if data.shape != self.shape:
+            raise ShapeError(data.shape, self.shape)
+
         if self._post_shape is None:
             self._post_shape = data.shape
         if self._dtype is None:
@@ -458,7 +493,7 @@ class OfflineDataList(object):
         :param dim: axis to pad
         :type dim: int
         """
-        shapes = np.array([s._shape for s in self.entries]).T
+        shapes = np.array([s.shape for s in self.entries]).T
         dim = dim or tuple(range(len(shapes[0].shape)))
         maxs_shape = []
         for d in range(shapes.shape[0]):

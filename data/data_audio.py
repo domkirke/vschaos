@@ -567,8 +567,9 @@ class OfflineDatasetAudio(DatasetAudio):
         finalMeta = []
         parsing_dict = None
         selector = options.get('offline_selector', 'Selector')
+        selector_args = options.get('offline_selector_args', {})
         if issubclass(type(selector), str):
-            selector = getattr(asyn, selector)()
+            selector = getattr(asyn, selector)(**selector_args)
         if os.path.isfile(f"{self.analysisDirectory}/{transformName}/parsing.vs"):
             parsing_file = open(f"{self.analysisDirectory}/{transformName}/parsing.vs", "rb")
             parsing_dict = dill.load(parsing_file)
