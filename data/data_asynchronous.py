@@ -27,16 +27,42 @@ class Selector(object):
     def __init__(self):
         pass
 
+    def __repr__(self):
+        return "Selector()"
+
+    def __getitem__(self, idx):
+        return IndexPick(idx)
+
     def get_shape(self, shape):
         return shape
 
     def __call__(self, file, shape=None, dtype=np.float, **kwargs):
         return np.memmap(file, dtype=dtype, mode='r', offset=0, shape=shape)
 
+"""
+class SelectorChain(Selector):
+
+    def __init__(self, *args):
+        self.selectors = args
+
+    def get_shape(self, shape):
+        for sel in self.selectors:
+            shape = sel.get_shape(shape)
+        return shape
+
+    def __call__(self, file, *args, **kwargs):
+"""
+
 
 class IndexPick(Selector):
     def __init__(self, idx, axis=0):
         self.idx =  idx; self.axis = axis
+
+    def  __repr__(self):
+        return "IndexPick(%d)"%self.idx
+
+    def __getitem__(self):
+        raise NotImplementedError
 
     def get_shape(self, shape):
         return shape[self.axis+1:]
@@ -48,6 +74,55 @@ class IndexPick(Selector):
         return np.memmap(file, dtype=dtype, mode='r', offset=offset, shape=self.get_shape(shape))
 
 
+class RandomPick(Selector):
+    def __init__(self, range=None, axis=0):
+        self.range = range
+        if self.range:
+            self.range = tuple(self.range)
+        self.axis = axis
+
+    def  __repr__(self):
+        return "RandomPick(range=%s)"%self.range
+
+    def get_shape(self, shape):
+        return shape[self.axis+1:]
+
+    def __call__(self, file, shape=None, axis=0, dtype=np.float,  strides=None, **kwargs):
+        assert axis==0, "memmap indexing on axis > 0 is not implemented yet"
+        random_range = self.range or (0, shape[0])
+        idx = np.random.randint(*random_range)
+        offset = (idx * shape[1])*strides[1]
+        return np.memmap(file, dtype=dtype, mode='r', offset=offset, shape=self.get_shape(shape))
+
+class RandomRangePick(Selector):
+    def __init__(self, range=None, length=64, axis=0):
+        self.range = range; self.length = length
+        if self.range:
+            self.range = tuple(self.range)
+        self.axis = axis
+
+    def __getitem__(self, idx):
+        return RandomPick(self.range)
+
+    def  __repr__(self):
+        return "RandomRangePick(length=%s, range=%s)"%(self.length, self.range)
+
+    def get_shape(self, shape):
+        return (self.length, *shape[self.axis+1:])
+
+    def __call__(self, file, shape=None, axis=0, dtype=np.float,  strides=None, **kwargs):
+        assert axis==0, "memmap indexing on axis > 0 is not implemented yet"
+        random_range = self.range or (0, shape[0])
+        chunks = [None]*self.length
+        idx_buffer = np.array(range(*random_range))
+        np.random.shuffle(idx_buffer)
+        for i in range(self.length):
+            offset = (idx_buffer[i] * shape[1])*strides[1]
+            chunks[i] = np.memmap(file, dtype=dtype, mode='r', offset=offset, shape=self.get_shape(shape))
+        return np.stack(chunks, axis=0)
+
+
+
 
 class OfflineEntry(object):
     """
@@ -55,7 +130,7 @@ class OfflineEntry(object):
     once first
     """
     def __repr__(self):        
-        return "OfflineEntry(lambda %s of file %s)"%(self.func, self.file)
+        return "OfflineEntry(lambda %s of file %s)"%(self.selector, self.file)
     
     def __init__(self, file, selector=Selector(), dtype=None, shape=None, strides=None, target_length=None):
         """
@@ -129,11 +204,15 @@ class OfflineEntry(object):
             raise NotImplementedError
         if self.shape is None:
             raise NoShapeError()
-        if len(self.shape) < 2 or axis > len(self.shape):
+        if axis > len(self.shape):
             raise ValueError('%s with shape %s cannot be split among axis %d'%(type(self), self.shape, axis))
-        entries = [None]*self.shape[axis]
-        for i in range(self.shape[axis]):
-            entries[i] = type(self)(self.file, dtype=self.dtype, shape=self.shape, strides=self.strides, selector=IndexPick(i))
+
+        if len(self.shape) == 1:
+            entries = [self]
+        else:    
+            entries = [None]*self.shape[axis]
+            for i in range(self.shape[axis]):
+                entries[i] = type(self)(self.file, dtype=self.dtype, shape=self.shape, strides=self.strides, selector=self.selector[i])
         return entries
     
 
@@ -258,9 +337,9 @@ class OfflineDataList(object):
     """
     EntryClass = OfflineEntry
     def __repr__(self):
-        string = '['
+        string = '[\n'
         for e in self.entries:
-            string += str(e)+', '
+            string += f"\t{str(e)},\n"
         string += ']'
         return string
     
@@ -439,7 +518,7 @@ class OfflineDataList(object):
 
 
 
-    def __init__(self, *args, selector_gen=selector_take, check=True, dtype=None, stride=None, transforms=None, padded=False):
+    def __init__(self, *args, selector=Selector(), check=True, dtype=None, stride=None, transforms=None, padded=False):
         """
         Returns an OfflineDataList
         :param args:

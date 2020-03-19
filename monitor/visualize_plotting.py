@@ -729,7 +729,6 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
         sequence = sequence or len(full_z.shape) > 2
 
         # transform in case
-        """
         if full_z.shape[-1] > 3 and not sequence:
             assert transformation, 'if dimensionality > 3 please specify the transformation keyword'
             if issubclass(type(transformation), list):
@@ -744,8 +743,6 @@ def plot_latent3(dataset, model, transformation=None, n_points=None, preprocessi
                 full_z = transformation.transform(full_z)
             if original_shape is not None:
                 full_z = full_z.reshape(*original_shape[:-1], full_z.shape[-1])
-        """
-        full_z = full_z[:,:,:3]
 
         # iteration over tasks
         for task in tasks:

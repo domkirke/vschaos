@@ -566,6 +566,9 @@ class OfflineDatasetAudio(DatasetAudio):
         finalData = []
         finalMeta = []
         parsing_dict = None
+        selector = options.get('offline_selector', 'Selector')
+        if issubclass(type(selector), str):
+            selector = getattr(asyn, selector)()
         if os.path.isfile(f"{self.analysisDirectory}/{transformName}/parsing.vs"):
             parsing_file = open(f"{self.analysisDirectory}/{transformName}/parsing.vs", "rb")
             parsing_dict = dill.load(parsing_file)
@@ -592,15 +595,18 @@ class OfflineDatasetAudio(DatasetAudio):
 
             if issubclass(type(curAnalysisFile), list):
                 print('[%d/%d] adding %s...'%(i, len(curBatch), f))
-                finalData.append(asyn.OfflineDataList([self.entry_class(c) for c in curAnalysisFile], padded=padded))
+                finalData.append(asyn.OfflineDataList([self.entry_class(c, selector=selector) for c in curAnalysisFile], padded=padded))
                 finalMeta.append([0]*len(curAnalysisFile));
             else:
                 curRealName = re.sub(f'{self.analysisDirectory}/{transformName}', '', curAnalysisFile)
                 shape = None if parsing_dict is None else parsing_dict[curRealName]['shape']
                 dtype = np.float if parsing_dict is None else parsing_dict[curRealName]['dtype']
                 strides = np.float if parsing_dict is None else parsing_dict[curRealName]['strides']
-                finalData.append(self.entry_class(curAnalysisFile, shape=shape, dtype=dtype, strides=strides))
+                finalData.append(self.entry_class(curAnalysisFile, shape=shape, dtype=dtype, strides=strides, selector=selector))
                 finalMeta.append(0);
+        if os.path.isfile("%s/%s/transformOptions.npy"%(analysisDirectory, transformName)):
+            self.transformOptions = np.load("%s/%s/transformOptions.npy"%(analysisDirectory, transformName), allow_pickle=True)[None][0]
+
         return finalData, finalMeta
 
 
