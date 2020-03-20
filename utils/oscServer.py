@@ -457,7 +457,7 @@ class VAEServer(OSCServer):
                 latent_rs = self.deformer.add_original(latent, 65)
                 for s in range(latent.shape[0]):
                     self.send_bach_series('/encode', s, latent_rs[s])
-            self.current_traj = latent
+            self.current_traj = latent.T
             if latent.shape[0] < MAX_TRAJECTORY_LENGTH:
                 self.send('/latent', latent_rs.squeeze().tolist())
             self.print('Server ready')
@@ -477,11 +477,11 @@ class VAEServer(OSCServer):
 
         if args[0] == "point":
             latent_dim = self.model.platent[self.current_layer]['dim']
-            self.current_traj = np.zeros((1, latent_dim))
+            self.current_traj = np.zeros((latent_dim, 1))
             if len(args)-1 >= latent_dim:
-                self.current_traj[0] = np.array(args[1:latent_dim+1])
+                self.current_traj[:, 0] = np.array(args[1:latent_dim+1])
             else:
-                self.current_traj[0, :len(args)] = np.array(args[1:])
+                self.current_traj[:len(args), 0] = np.array(args[1:])
 
         if args[0] in ["generate", "point"]:
             try:
@@ -640,6 +640,11 @@ class VAEServer(OSCServer):
             cond_series = np.array([int(a) for a in conditioning])
         elif issubclass(type(args[1]), np.ndarray):
             cond_series = args[1]
+        else:
+            try:
+                cond_series = np.array(args[1:])
+            except Exception as e:
+                print('could not parse condition %s because of : %s'%(args[1:], e))
         self.current_conditioning[cond_type] = cond_series
 
     def get_spectrogram(self, *args, projection=None, filter=True):
