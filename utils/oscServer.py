@@ -459,7 +459,7 @@ class VAEServer(OSCServer):
                     self.send_bach_series('/encode', s, latent_rs[s])
             self.current_traj = latent
             if latent.shape[0] < MAX_TRAJECTORY_LENGTH:
-                self.send('/latent', latent.squeeze().tolist())
+                self.send('/latent', latent_rs.squeeze().tolist())
             self.print('Server ready')
         except Exception as e:
             self.print('Encoding failed.')
@@ -485,25 +485,28 @@ class VAEServer(OSCServer):
 
         if args[0] in ["generate", "point"]:
             try:
-                y = {}
-                if self.condition_params != {}:
-                    for k, t in self.condition_params.items():
-                        if self.current_conditioning.get(k) is not None:
-                            if len(self.current_conditioning[k]) > 2:
-                                y[k] = torch.from_numpy(resample(np.array(self.current_conditioning[k]), self.current_traj.shape[1]))
-                            else:
-                                y[k] = torch.from_numpy(self.current_conditioning[k].repeat(self.current_traj.shape[1]))
-                        else:
-                            y[k] = torch.zeros(self.current_traj.shape[1]).int()
-
                 self.print('Decoding...')
 
                 z = self.current_traj
                 if self.projection is not None:
                     z = self.projection.invert(z)
 
+                y = {}
+                if self.condition_params != {}:
+                    for k, t in self.condition_params.items():
+                        if self.current_conditioning.get(k) is not None:
+                            if len(self.current_conditioning[k]) == 1:
+                                y[k] = torch.from_numpy(self.current_conditioning[k].repeat(self.current_traj.shape[1]))
+                            elif self.current_conditioning[k].shape[0] != z.shape[1]:
+                                y[k] = self.get_deformed_serie(self.current_conditioning[k], target_length=z.shape[1], axis=0).int()
+                            else:
+                                y[k] = torch.from_numpy(self.current_conditioning[k]).int()
+                        else:
+                            y[k] = torch.zeros(self.current_traj.shape[1]).int()
+
+
                 with torch.no_grad():
-                    vae_out = self.model.decode(self.model.format_input_data(z), y=y)
+                    vae_out = self.model.decode(self.model.format_input_data(z.T), y=y)
                 reco = vae_out[self.current_layer]['out_params'].mean.cpu().numpy().T
 
                 self.print('Preprocessing...')
@@ -548,11 +551,11 @@ class VAEServer(OSCServer):
             self.interpolate_points[k] = new_v
 
     def get_deformed_serie(self, serie, target_serie=None, target_length=None, axis=0):
-        if target_serie:
-            target_length = target_serie.shape[0]
+        if target_serie is not None:
+            target_length = target_serie.shape[1]
         if target_length is None:
             if self.current_traj is not None:
-                target_length = self.current_traj.shape
+                target_length = self.current_traj.shape[1]
             else:
                 return serie
         if torch.is_tensor(serie):
@@ -573,13 +576,12 @@ class VAEServer(OSCServer):
             print('Adding current point as ' + interp[1])
             self.interpolate_points[interp[1]] = self.current_traj
             if self.current_conditioning is not None:
-                self.interpolate_conditions[interp[1]] = {k:v.get_deformed_serie()
-                                                          for k,v in self.current_conditioning.items()}
+                self.interpolate_conditions[interp[1]] = dict(self.current_conditioning)
             print("Added !")
             return
         if (interp[0] == 'random'):
             print('Adding random point as ' + interp[1])
-            self.interpolate_points[interp[1]] = np.random.randn(self._model.latent_dims, self.n_points * self.scaling)
+            self.interpolate_points[interp[1]] = np.random.randn(self._model.platent[self.current_layer]['dim'], self.current_traj[1])
             return
 
 
@@ -587,28 +589,23 @@ class VAEServer(OSCServer):
         interp_vals = [float(x) for x in interp[1::2]]
         if (self.current_conditioning is not None):
             for k, v in self.current_conditioning.items():
-                # Retrieve first point to infer size
-                f_point = self.interpolate_conditions[interp_names[0]][k]
-                # Create the empty point
-                z = np.zeros(f_point.shape[0])
-                if (len(f_point.shape) > 1):
-                    z = np.zeros((f_point.shape[0], f_point.shape[1]))
+                target_shape = np.max([x[k].shape[0] for x in self.interpolate_conditions.values()])
+                z = np.zeros((target_shape))
                 for n, v in zip(interp_names, interp_vals):
-                    z += self.interpolate_conditions[n][k] * v
-                #resamp = SerieDeformation().add_original(z, 65)
-
-                self._model.condition(k, z)
-                self.send_bach_series('/condition', k, z)
+                    if n not in self.interpolate_conditions.keys():
+                        continue
+                    z += self.get_deformed_serie(self.interpolate_conditions[n][k], target_length=target_shape, axis=0).numpy() * v
+                self.condition(k, z)
+                cond_ds = self.cd_deformer[k].add_original(z, target_shape)
+                self.send_bach_series('/condition', k, cond_ds.astype('int'))
 
         valid_points = list(filter(lambda x: interp_names[x] in self.interpolate_points.keys(), range(len(interp_names))))
         interp_names = [interp_names[i] for i in valid_points]
         interp_vals = [interp_vals[i] for i in valid_points]
         if (self.interpolate_latent) and len(interp_names) > 0:
-            # Retrieve first point to infer size
-            f_point = self.interpolate_points[interp_names[0]]
             # Create the empty point
-            z = np.zeros((f_point.shape[0], f_point.shape[1]))
-            target_shape = max([x.shape[1] for x in self.interpolate_points.values()])
+            target_shape = np.max([x.shape[1] for x in self.interpolate_points.values()])
+            z = np.zeros((self.model.platent[self.current_layer]['dim'], target_shape))
 
             for n, v in zip(interp_names, interp_vals):
                 if not n in self.interpolate_points.keys():
@@ -616,11 +613,15 @@ class VAEServer(OSCServer):
                 z += self.get_deformed_serie(self.interpolate_points[n], target_length=target_shape, axis=1).numpy() * v
 
             #resamp = SerieDeformation().add_original(z, 65)
-            for s in range(z.shape[0]):
-                self.send_bach_series('/encode', s, z[s])
             # Compute decoding
+
+            traj_ds = self.deformer.add_original(z, 65)
+            for s in range(z.shape[0]):
+                self.send_bach_series('/encode', s, traj_ds[s])
+
             self.current_traj = z
             result = self.decode('generate')
+
             # Write result to file
             #path = self.output_wav(result)
             # Send the path to interface
@@ -634,10 +635,12 @@ class VAEServer(OSCServer):
 
     def condition(self, *args):
         cond_type = str(args[0])
-        cond_series = np.array([int(a) for a in args[1].split(' ')])
+        if issubclass(type(args[1]), str):
+            conditioning = args[1] if " " in args else args[1].split(' ')
+            cond_series = np.array([int(a) for a in conditioning])
+        elif issubclass(type(args[1]), np.ndarray):
+            cond_series = args[1]
         self.current_conditioning[cond_type] = cond_series
-
-
 
     def get_spectrogram(self, *args, projection=None, filter=True):
         if self._model is None:
