@@ -523,13 +523,23 @@ def computeTransform(audioList, transformType, options={}, out=None):
             dirname = '/'.join(os.path.abspath(out).split('/')[:-1])
             if not os.path.isdir(dirname):
                 os.makedirs(dirname)
-            if issubclass(type(currentTransform), list):
-                [np.savez_compressed('%s_%s'%(out, i), currentTransform[i]) for i in range(len(currentTransform))]
-            else:
-                np.savez_compressed(out, currentTransform)
+            save_memmap(currentTransform, out)
+            # if issubclass(type(currentTransform), list):
+            #     [np.savez_compressed('%s_%s'%(out, i), currentTransform[i]) for i in range(len(currentTransform))]
+            # else:
+            #     print(out);
+            #     np.savez_compressed(out, currentTransform)
+    return {'shape':currentTransform.shape, 'strides':currentTransform.strides, 'dtype':currentTransform.dtype}
 
-            
-    return resultList
+
+def save_memmap(arr, path_out):
+    if issubclass(type(arr), list):
+        [save_memmap(arr[i], path_out+'_'+i) for i in range(len(arr))]
+    else:
+        current_memmap = np.memmap(f'{path_out}.dat', arr.dtype, 'w+', shape=arr.shape)
+        current_memmap[:] = arr[:]
+        del current_memmap
+
         
 
 def inverseTransform(transform, transformType, options, iterations=5, output=None, method='griffin-lim', originalPhase=None, *args, **kwargs):

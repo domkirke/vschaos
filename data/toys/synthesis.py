@@ -130,7 +130,9 @@ def noise_generator(T=1, fs=44100, fc=100, fb=50, fe=200, gpass=3, gstop=40, fad
     
 
 
-def dataset_from_generator(T, fs, generator, export=None, name=None, *args, **kwargs):
+def dataset_from_generator(T, fs, generator, export=None, name=None,
+                           transforms=None, transform_names=None, transform_parameters=None,
+                           *args, **kwargs):
     generator_args = kwargs
     axis = [];  parameter_name = []; param_buffer = dict(); metadata=dict();
        
@@ -197,13 +199,15 @@ def dataset_from_generator(T, fs, generator, export=None, name=None, *args, **kw
             
         running_id += 1
         
-    dataset = DatasetAudio({})
     if export != None:
-        dataset.dataDirectory = export+'/data'
-        dataset.metadataDirectory = export+'/metadata'
-        dataset.dataPrefix = export
-    dataset.metadata = metadata
-    dataset.files = files
-    
+
+        dataset = DatasetAudio({'dataPrefix':export})
+        dataset.data = data
+        dataset.metadata = metadata
+        dataset.files = files
+
+        if transforms is not None:
+            dataset.compute_transforms(transforms, transform_parameters, transform_names=transform_names)
+
     return dataset, data
 

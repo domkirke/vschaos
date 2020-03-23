@@ -1,7 +1,7 @@
 from numpy import ceil, array, cumprod
 from torch import sqrt, exp, sigmoid, tensor, eye
 from ..distributions import Bernoulli, Normal, Categorical, MultivariateNormal, RandomWalk, Empirical
-from ..distributions.distribution_flow import Flow
+from ..distributions.distribution_flow import Flow, FlowDistribution
 import torch.nn as nn, pdb
 
 from . import init_module, MLP, ConvolutionalLatent, DeconvolutionalLatent
@@ -440,7 +440,7 @@ class BernoulliLayer2D(nn.Module):
         else:
             mu_out = self.mean_modules(ins, indices=indices)
 
-        mu_out = nn.functional.sigmoid(mu_out)
+        mu_out = sigmoid(mu_out)
 
         if is_seq:
             mu_out = mu_out.reshape(n_batch, n_seq, *mu_out.shape[1:])
@@ -588,11 +588,25 @@ class CategoricalLayer2D(nn.Module):
 
         return Categorical(probs=mu_out)
 
+def FlowLayer(distrib):
+    if not issubclass(type(distrib), Flow):
+        raise ValueError("FlowLayer should only be used with Flow distribution, not %s"%distrib)
+    layer = get_module_from_density(distrib.dist)
+    print(layer)
+
+    class FlowLayer(layer):
+        flow = distrib._flow
+        def forward(self, *args, **kwargs):
+            out = super(FlowLayer, self).forward(*args, **kwargs)
+            return FlowDistribution(out, self.flow)
+
+    return FlowLayer
+
 
 
 def get_module_from_density(distrib):
     if issubclass(type(distrib), Flow):
-        distrib = distrib.dist
+        return FlowLayer(distrib)
     if distrib == Empirical:
         return EmpiricalLayer
     if distrib in (dist.Normal, dist.RandomWalk, dist.MultivariateNormal):

@@ -196,11 +196,21 @@ class DatasetAudio(generic.Dataset):
         metadata : dict
             metadata dictionary
         """
-        def load(path):
-            if os.path.splitext(path)[1] == ".npy":
+
+        def load(path, memmap_parsing=None):
+            name, ext = os.path.splitext(path)
+            if ext  == ".npy":
                 return np.load(path)
-            elif os.path.splitext(path)[1] == ".npz":
+            elif ext == ".npz":
                 return np.load(path)['arr_0']
+            elif ext == ".dat":
+                if memmap_parsing is None:
+                    with open(f'{analysisDirectory}/{transformName}/parsing.vs', 'rb') as mf:
+                        memmap_parsing = dill.load(mf)
+                current_entry = memmap_parsing.get(re.sub(os.path.abspath(f"{analysisDirectory}/{transformName}"), '', name+'.dat'))
+                if current_entry is not None:
+                    dtype = current_entry['dtype']; shape = current_entry['shape']
+                return np.memmap(path, dtype=dtype, mode='r', offset=0, shape=shape)
 
         dataPrefix = options.get('dataPrefix')
         dataDirectory = options.get('dataDirectory') or dataPrefix+'/data' or ''
@@ -215,6 +225,13 @@ class DatasetAudio(generic.Dataset):
         transformName= options.get('transformName')
         finalData = []
         finalMeta = []
+
+        memmap_parsing = None
+        try:
+            with open(f'{analysisDirectory}/{transformName}/parsing.vs', 'rb') as mf:
+                memmap_parsing = dill.load(mf)
+        except FileNotFoundError:
+            print('[Warning] parsing file not found')
         for f in curBatch:
             if transformName is None:
                 finalData.append(librosa.load(f)[0])
@@ -227,10 +244,14 @@ class DatasetAudio(generic.Dataset):
                     files.append(name+'.npz')
                 elif os.path.exists(name+'.npy'):
                     files.append(name+'.npy')
+                elif os.path.exists(name+'.dat'):
+                    files.append(name+'.dat')
                 else:
-                    while os.path.exists(name+'_%d'%idx+'.npz') or os.path.exists(name+'_%d'%idx+'.npy'):
+                    while os.path.exists(name+'_%d'%idx+'.npz') or os.path.exists(name+'_%d'%idx+'.npy') or os.path.exists(name+'_%d'%idx+'.dat'):
                         if os.path.exists(name+'_%d'%idx+'.npz'):
                             files.append(name+'_%d'%idx+'.npz')
+                        elif os.path.exists(name+'_%d'%idx+'.dat'):
+                            files.append(name+'_%d'%idx+'.dat')
                         else:
                             files.append(name+'_%d'%idx+'.npy')
                         idx += 1
@@ -240,10 +261,10 @@ class DatasetAudio(generic.Dataset):
                 curAnalysisFile = files
 
                 if issubclass(type(curAnalysisFile), list):
-                    finalData.append([load(c) for c in curAnalysisFile])
+                    finalData.append([load(c, memmap_parsing) for c in curAnalysisFile])
                     finalMeta.append([0]*len(curAnalysisFile))
                 else:
-                    finalData.append(load(curAnalysisFile))
+                    finalData.append(load(curAnalysisFile, memmap_parsing))
                     finalMeta.append(0)
 
         if os.path.isfile("%s/%s/transformOptions.npy"%(analysisDirectory, transformName)):
@@ -258,7 +279,8 @@ class DatasetAudio(generic.Dataset):
 
         for i in reversed(range(len(self.files))):
             analysis_path = [os.path.splitext(re.sub(self.dataDirectory, self.analysisDirectory+'/'+self.transformName, self.files[i]))[0]+'.npy',
-                             os.path.splitext(re.sub(self.dataDirectory, self.analysisDirectory+'/'+self.transformName, self.files[i]))[0]+'.npz']
+                             os.path.splitext(re.sub(self.dataDirectory, self.analysisDirectory+'/'+self.transformName, self.files[i]))[0]+'.npz',
+                             os.path.splitext(re.sub(self.dataDirectory, self.analysisDirectory+'/'+self.transformName, self.files[i]))[0]+'.dat']
             tests = []
             for a_tmp in analysis_path:
                 try:
@@ -444,7 +466,7 @@ class DatasetAudio(generic.Dataset):
     ###################################
     """
     
-    def compute_transforms(self, transformTypes, transformParameters, transformNames=None, idList=None, padding=False, forceRecompute=False, verbose=False):
+    def compute_transforms(self, transformTypes, transformParameters, transform_names=None, idList=None, padding=False, forceRecompute=False, verbose=False):
         """
         .. function:: compute_transforms(transfromTypes, transformParameters[, transformNames=None, idList=None, padding=None])
 
@@ -466,17 +488,17 @@ class DatasetAudio(generic.Dataset):
         """
         dataDirectory = self.dataDirectory or self.dataPrefix+'/data'
         analysisDirectory = self.analysisDirectory or self.dataPrefix+'/analysis'
-        if transformNames is None:
-            transformNames = transformTypes
-        if len(transformNames)!=len(transformTypes):
+        if transform_names is None:
+            transform_names = transformTypes
+        if len(transform_names)!=len(transformTypes):
             raise Exception('please give the same number of transforms and names')
             
         if not issubclass(type(transformTypes), list):
             transformTypes = [transformTypes]
         if not issubclass(type(transformParameters), list):
             transformParameters = [transformParameters]
-        if not issubclass(type(transformNames), list):
-            transformNames = [transformNames]
+        if not issubclass(type(transform_names), list):
+            transform_names = [transform_names]
         
         # get indices to compute
         if (idList is None):
@@ -493,18 +515,20 @@ class DatasetAudio(generic.Dataset):
             os.makedirs(analysisDirectory)
             
         for i in range(len(transformTypes)):
-            current_transform_dir = analysisDirectory+'/'+transformNames[i]
+            current_transform_dir = analysisDirectory+'/'+transform_names[i]
             if not os.path.isdir(current_transform_dir):
                 os.makedirs(current_transform_dir)
             for v in indices:
                 curFiles = [None] * v.shape[0]
                 for f in range(v.shape[0]):
                     curFiles[f] = self.files[int(v[f])]
-                makeAnalysisFiles(curFiles, transformTypes[i], transformParameters[i], dataDirectory, analysisDirectory+'/'+transformNames[i], transformName=transformNames[i], forceRecompute=forceRecompute, verbose=verbose)
+                parsing_hash = makeAnalysisFiles(curFiles, transformTypes[i], transformParameters[i], dataDirectory, analysisDirectory+'/'+transform_names[i], transformName=transform_names[i], forceRecompute=forceRecompute, verbose=verbose)
                 
             # save transform parameters
             transformParameters[i]['transformType'] = transformTypes[i]
             np.save(current_transform_dir+'/transformOptions.npy', transformParameters[i])
+            with open(f'{current_transform_dir}/parsing.vs', 'wb') as f:
+                dill.dump(parsing_hash, f)
 
     def retrieve(self, idx):
         dataset = super(DatasetAudio, self).retrieve(idx)
@@ -709,11 +733,14 @@ def makeAnalysisFiles(curBatch, transformType, options, oldRoot, newRoot, transf
     curAnalysisFiles = curAnalysisFiles[:curIDf]
     
     # Compute transform of files that have not been computed yet
+    transform_hash = {}
     if (len(audioList) > 0):
         if verbose:
             print("* Computing transforms ...")        
         for i, target_file in enumerate(curAnalysisFiles):
-            current_transforms = computeTransform([audioList[i]], transformType, options, out=curAnalysisFiles[i])
+            name = re.sub(os.path.abspath(newRoot), '', target_file)
+            transform_hash[name+'.dat'] = computeTransform([audioList[i]], transformType, options, out=curAnalysisFiles[i])
+    return transform_hash
 
             
         

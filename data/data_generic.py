@@ -214,7 +214,7 @@ class Dataset(torch.utils.data.Dataset):
         for t in range(len(self.tasks)):
             self.taskCallback[t] = (options.get("taskCallback") and options["taskCallback"][t]) or self.retrieve_callback_from_path(self.metadataDirectory, self.tasks[t]) or metadataCallbacks["default"] or []
             self.metadataFiles[t] = (options.get("metadataFiles") and options["metadataFiles"][t]) or self.metadataDirectory + '/' + self.tasks[t] + '/metadata.txt' or self.metadataDirectory + '/metadata.txt'
-        self.drop_tasks = None
+        self.drop_tasks = []
         if len(self.tasks) > 0:
             self.drop_tasks = self.tasks
 
@@ -275,10 +275,7 @@ class Dataset(torch.utils.data.Dataset):
             # can also be OfflineDataList, so check is shape is None
             return self.data.shape[0] if self.data.shape else len(self.data)
         else:
-            if self.has_sequences:
-                return len(self.data)
-            else:
-                return self.data[0].shape[0]
+            return len(self.data)
 
 
     def _get_padded_data(self, data, padded_dims, padded_lengths):
@@ -457,6 +454,7 @@ class Dataset(torch.utils.data.Dataset):
                      'labels':self.labels,
                      'classes':self.classes,
                      'options_dict':self.get_options_dict(),
+                     'preprocessing':self.preprocessing,
                      **add_args}
         return save_dict
 
@@ -467,6 +465,7 @@ class Dataset(torch.utils.data.Dataset):
         dataset.files = loaded['dataset']['files']; dataset.hash = loaded['dataset']['hash']
         dataset.labels = loaded['dataset']['labels']; dataset.classes = loaded['dataset']['classes']
         dataset.partitions = loaded['dataset']['partitions']
+        dataset.preprocessing = loaded['dataset']['preprocessing']
         return dataset
    
     def save(self, location=None, **add_args):
@@ -690,6 +689,7 @@ class Dataset(torch.utils.data.Dataset):
         if sort:
             for t in self.tasks:
                 self.sort_metadata(t)
+        self.drop_task(self.tasks)
 
     def sort_metadata(self, task):
         """
@@ -768,7 +768,7 @@ class Dataset(torch.utils.data.Dataset):
     ###################################
     """
 
-    def construct_partition(self, tasks, partitionNames, partitionPercent,  balancedClass=True, equalClass=False):
+    def construct_partition(self, partitionNames, partitionPercent, tasks=None, balancedClass=True, equalClass=False):
         """
         Construct a random/balanced partition set for each dataset
         Only takes indices with valid metadatas for every task
@@ -782,9 +782,8 @@ class Dataset(torch.utils.data.Dataset):
         :param bool equalClass: enforces each class to be present with the same number of instances
         """
         #TODO balancing broken
-        if (type(tasks) is str):
-            tasks = [tasks]
-        if len(tasks)==0 and balancedClass:
+        tasks = checklist(tasks)
+        if tasks is None and balancedClass:
             tasks = self.tasks
         if (balancedClass is True):
             balancedClass = tasks[0]
@@ -869,7 +868,7 @@ class Dataset(torch.utils.data.Dataset):
             self.partitions[partitionNames[p]] = np.array(partitions[partitionNames[p]]);
         return partitions
 
-    def construct_partition_from_files(self, tasks, partitionNames, partitionPercent, balancedClass=True):
+    def construct_partition_from_files(self, partitionNames, partitionPercent, tasks=None, balancedClass=True):
         """
         Construct partitions, such that indices corresponding the same files are gathered in the same partition.
 
@@ -1124,7 +1123,7 @@ class Dataset(torch.utils.data.Dataset):
 
 
 
-    def remove_files(self, n_files):
+    def remove_files(self, n_files, shuffle=True):
         """
         just keep a given number of files and drop the rest
         :param n_files: number of kept audio files
@@ -1132,7 +1131,10 @@ class Dataset(torch.utils.data.Dataset):
         """
         files_set = set(self.files)
         assert n_files < len(files_set), "number of amputated files greater than actual number of files!"
-        selected_files = np.random.choice(np.array(list(files_set)), n_files, replace=False)
+        if shuffle:
+            selected_files = np.random.choice(np.array(list(files_set)), n_files, replace=False)
+        else:
+            selected_files = list(files_set)[:n_files]
         return self.filter_files(selected_files)
 
     def translate_files(self, files):

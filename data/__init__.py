@@ -44,9 +44,9 @@ __all__     = ["Dataset", "DatasetAudio", "metadata", "pp", "toys", "signal"]
 import pdb
 #pdb.set_trace()
 from .data_utils import *
-from .data_generic import Dataset
+from .data_generic import Dataset, dataset_from_torch
 from .data_audio import DatasetAudio, OfflineDatasetAudio
 from . import data_metadata as metadata
-from . import data_preprocessing as pp
+from .data_preprocessing import Normalize, Magnitude
 from . import toys
 from . import signal

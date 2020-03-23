@@ -56,7 +56,7 @@ class SelectorChain(Selector):
 
 class IndexPick(Selector):
     def __init__(self, idx=None, axis=0):
-        assert idx
+        assert idx is not None
         self.idx =  idx; self.axis = axis
 
     def  __repr__(self):
