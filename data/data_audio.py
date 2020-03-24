@@ -210,7 +210,10 @@ class DatasetAudio(generic.Dataset):
                 current_entry = memmap_parsing.get(re.sub(os.path.abspath(f"{analysisDirectory}/{transformName}"), '', name+'.dat'))
                 if current_entry is not None:
                     dtype = current_entry['dtype']; shape = current_entry['shape']
-                return np.memmap(path, dtype=dtype, mode='r', offset=0, shape=shape)
+                mmap = np.memmap(path, dtype=dtype, mode='r', offset=0, shape=shape)
+                array = np.array(mmap)
+                del mmap
+                return array
 
         dataPrefix = options.get('dataPrefix')
         dataDirectory = options.get('dataDirectory') or dataPrefix+'/data' or ''
