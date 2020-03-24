@@ -588,25 +588,25 @@ class CategoricalLayer2D(nn.Module):
 
         return Categorical(probs=mu_out)
 
-def FlowLayer(distrib):
-    if not issubclass(type(distrib), Flow):
-        raise ValueError("FlowLayer should only be used with Flow distribution, not %s"%distrib)
-    layer = get_module_from_density(distrib.dist)
-    print(layer)
 
-    class FlowLayer(layer):
-        flow = distrib._flow
-        def forward(self, *args, **kwargs):
-            out = super(FlowLayer, self).forward(*args, **kwargs)
-            return FlowDistribution(out, self.flow)
+class FlowLayer(nn.Module):
 
-    return FlowLayer
+    def __init__(self, pinput, poutput, *args, **kwargs):
+        super(FlowLayer, self).__init__()
+        if not issubclass(type(poutput.get('dist')), Flow):
+            raise ValueError("FlowLayer should only be used with Flow distribution, not %s"%poutput.get('dist'))
+        layer = get_module_from_density(poutput['dist'].dist)
+        self.distrib_layer = layer(pinput, poutput, *args, **kwargs)
+        self.flow = poutput['dist']._flow
 
+    def forward(self, *args, **kwargs):
+        out = self.distrib_layer(*args, **kwargs)
+        return FlowDistribution(out, self.flow)
 
 
 def get_module_from_density(distrib):
     if issubclass(type(distrib), Flow):
-        return FlowLayer(distrib)
+        return FlowLayer
     if distrib == Empirical:
         return EmpiricalLayer
     if distrib in (dist.Normal, dist.RandomWalk, dist.MultivariateNormal):

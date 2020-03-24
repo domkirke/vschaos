@@ -30,10 +30,11 @@ class MLPReinforcementModule(torch.nn.Module):
         modules = []
         # retrieve input params
         input_dim = cumprod(checktuple(in_params['dim']))[-1]
+        output_dim = int(input_dim)
         if latent_params is not None:
             lp = checklist(latent_params)[0]
             input_dim += sum([k['dim'] for k in checklist(lp)])
-        output_dim = input_dim
+
 
         for i in range(n_layers):
             dim_in = input_dim if i==0 else hidden_dims[i]
